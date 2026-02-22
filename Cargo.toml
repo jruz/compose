@@ -58,6 +58,7 @@ struct_excessive_bools = "allow"
 
 # this project
 integer_division_remainder_used = "allow"
+panic = "allow"
 print_stdout = "allow"
 print_stderr = "allow"
 
