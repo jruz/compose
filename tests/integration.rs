@@ -16,9 +16,9 @@ mod tests {
 
     fn run_fixture(fixture: &str, subcommand: &str) -> Output {
         let Ok(output) = std::process::Command::new(binary_path())
-            .arg("--file")
-            .arg(fixture_path(fixture))
             .arg(subcommand)
+            .arg("--config")
+            .arg(fixture_path(fixture))
             .output()
         else {
             panic!("failed to execute binary with fixture {fixture}")
@@ -231,9 +231,9 @@ mod tests {
     #[test]
     fn missing_file() {
         let Ok(output) = std::process::Command::new(binary_path())
-            .arg("--file")
-            .arg("/tmp/nonexistent_compose_file_12345.yaml")
             .arg("run")
+            .arg("--config")
+            .arg("/tmp/nonexistent_compose_file_12345.yaml")
             .output()
         else {
             panic!("failed to execute binary")

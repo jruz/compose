@@ -84,7 +84,7 @@ pub async fn run(
     let (children, stderr_buffers) = start_all(&config, &fmt_ctx, &log_tx).await?;
 
     let shutdown = match mode {
-        Command::Run => ShutdownStrategy::MainProcess(
+        Command::Run(_) => ShutdownStrategy::MainProcess(
             config
                 .processes
                 .keys()
@@ -92,7 +92,7 @@ pub async fn run(
                 .ok_or(Error::NoProcesses)?
                 .clone(),
         ),
-        Command::Up => ShutdownStrategy::AnyExit,
+        Command::Up(_) => ShutdownStrategy::AnyExit,
     };
 
     manage_lifecycle(
