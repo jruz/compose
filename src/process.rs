@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use owo_colors::Style;
@@ -29,21 +30,26 @@ pub enum Error {
 pub fn spawn(
     name: &str,
     command: &str,
+    env: &BTreeMap<String, String>,
     pad_width: usize,
     style: Style,
     log_tx: mpsc::UnboundedSender<String>,
 ) -> Result<(tokio::process::Child, StderrBuffer), Error> {
-    let mut child = Command::new("sh")
-        .arg("-c")
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c")
         .arg(command)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|source| Error::Spawn {
-            name: name.to_string(),
-            source,
-        })?;
+        .kill_on_drop(true);
+
+    for (key, value) in env {
+        cmd.env(key, value);
+    }
+
+    let mut child = cmd.spawn().map_err(|source| Error::Spawn {
+        name: name.to_string(),
+        source,
+    })?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();

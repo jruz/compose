@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -46,6 +46,8 @@ pub struct HealthCheck {
 pub struct ProcessDef {
     pub command: String,
     pub depends_on: Vec<String>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
     pub health: Option<HealthCheck>,
     pub name: String,
 }
