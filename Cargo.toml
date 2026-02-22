@@ -8,9 +8,9 @@ clap = { version = "4.5.60", features = ["derive"] }
 color-eyre = "0.6.3"
 owo-colors = "4.2.3"
 serde = { version = "1.0.228", features = ["derive"] }
+serde_yml = "0.0.12"
 thiserror = "2.0.12"
 tokio = { version = "1.49.0", features = ["full"] }
-toml = "1.0.3"
 
 [lints.rust]
 future_incompatible = "forbid"

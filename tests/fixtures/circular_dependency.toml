@@ -1,9 +1,0 @@
-[[process]]
-name = "alpha"
-command = "echo alpha"
-depends_on = ["beta"]
-
-[[process]]
-name = "beta"
-command = "echo beta"
-depends_on = ["alpha"]

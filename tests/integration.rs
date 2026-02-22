@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn run_main_exits_zero() {
-        let output = run_fixture("run_exit_zero.toml", "run");
+        let output = run_fixture("run_exit_zero.yaml", "run");
         assert_eq!(
             output.status.code(),
             Some(0_i32),
@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn run_main_exits_nonzero() {
-        let output = run_fixture("run_exit_nonzero.toml", "run");
+        let output = run_fixture("run_exit_nonzero.yaml", "run");
         assert_eq!(
             output.status.code(),
             Some(42_i32),
@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn run_support_crashes_exits_one() {
-        let output = run_fixture("run_support_crashes.toml", "run");
+        let output = run_fixture("run_support_crashes.yaml", "run");
         let stdout = stdout_text(&output);
         assert_eq!(
             output.status.code(),
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn up_any_exit_triggers_shutdown() {
-        let output = run_fixture("up_any_exit.toml", "up");
+        let output = run_fixture("up_any_exit.yaml", "up");
         let stdout = stdout_text(&output);
         assert_eq!(
             output.status.code(),
@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn crash_stderr_summary() {
-        let output = run_fixture("run_stderr_summary.toml", "run");
+        let output = run_fixture("run_stderr_summary.yaml", "run");
         let stdout = stdout_text(&output);
         assert_eq!(
             output.status.code(),
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn dependency_ordering() {
-        let output = run_fixture("dependency_order.toml", "run");
+        let output = run_fixture("dependency_order.yaml", "run");
         let stdout = stdout_text(&output);
         let db_pos = stdout.find("db-started");
         let app_pos = stdout.find("app-started");
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn health_check_gates_dependent() {
-        let output = run_fixture("health_check.toml", "run");
+        let output = run_fixture("health_check.yaml", "run");
         let stdout = stdout_text(&output);
         assert!(
             stdout.contains("healthy"),
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn inline_env_vars() {
-        let output = run_fixture("env_inline.toml", "run");
+        let output = run_fixture("env_inline.yaml", "run");
         let stdout = stdout_text(&output);
         assert_eq!(
             output.status.code(),
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn env_file_loads_vars() {
-        let output = run_fixture("env_file.toml", "run");
+        let output = run_fixture("env_file.yaml", "run");
         let stdout = stdout_text(&output);
         assert_eq!(
             output.status.code(),
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn env_inline_overrides_env_file() {
-        let output = run_fixture("env_file_override.toml", "run");
+        let output = run_fixture("env_file_override.yaml", "run");
         let stdout = stdout_text(&output);
         assert_eq!(
             output.status.code(),
@@ -205,28 +205,28 @@ mod tests {
 
     #[test]
     fn validation_duplicate_names() {
-        let output = run_fixture("duplicate_names.toml", "run");
+        let output = run_fixture("duplicate_names.yaml", "run");
         assert_ne!(output.status.code(), Some(0_i32));
         assert!(stderr_text(&output).contains("duplicate"));
     }
 
     #[test]
     fn validation_unknown_dependency() {
-        let output = run_fixture("unknown_dependency.toml", "run");
+        let output = run_fixture("unknown_dependency.yaml", "run");
         assert_ne!(output.status.code(), Some(0_i32));
         assert!(stderr_text(&output).contains("unknown"));
     }
 
     #[test]
     fn validation_circular_dependency() {
-        let output = run_fixture("circular_dependency.toml", "run");
+        let output = run_fixture("circular_dependency.yaml", "run");
         assert_ne!(output.status.code(), Some(0_i32));
         assert!(stderr_text(&output).contains("circular"));
     }
 
     #[test]
     fn validation_no_processes() {
-        let output = run_fixture("no_processes.toml", "run");
+        let output = run_fixture("no_processes.yaml", "run");
         assert_ne!(output.status.code(), Some(0_i32));
         let stderr = stderr_text(&output);
         assert!(
@@ -239,7 +239,7 @@ mod tests {
     fn missing_file() {
         let Ok(output) = std::process::Command::new(binary_path())
             .arg("--file")
-            .arg("/tmp/nonexistent_compose_file_12345.toml")
+            .arg("/tmp/nonexistent_compose_file_12345.yaml")
             .arg("run")
             .output()
         else {

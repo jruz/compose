@@ -27,14 +27,14 @@ pub enum Error {
     #[error("no processes defined")]
     NoProcesses,
 
-    #[error("failed to parse TOML from {path}: {source}")]
-    TomlParse {
-        path: PathBuf,
-        source: toml::de::Error,
-    },
-
     #[error("process {process} depends on unknown process: {dependency}")]
     UnknownDependency { dependency: String, process: String },
+
+    #[error("failed to parse YAML from {path}: {source}")]
+    YamlParse {
+        path: PathBuf,
+        source: serde_yml::Error,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,7 +66,7 @@ pub fn load(path: &Path) -> Result<Config, Error> {
         source,
     })?;
 
-    let config: Config = toml::from_str(&content).map_err(|source| Error::TomlParse {
+    let config: Config = serde_yml::from_str(&content).map_err(|source| Error::YamlParse {
         path: path.to_path_buf(),
         source,
     })?;

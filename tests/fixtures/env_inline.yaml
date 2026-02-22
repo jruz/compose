@@ -1,0 +1,10 @@
+process:
+  - name: support
+    command: "exec sleep 10"
+    depends_on: []
+
+  - name: main
+    command: "echo $MY_VAR && exit 0"
+    depends_on: []
+    env:
+      MY_VAR: hello-from-env

@@ -1,0 +1,8 @@
+process:
+  - name: app
+    command: "echo first"
+    depends_on: []
+
+  - name: app
+    command: "echo second"
+    depends_on: []

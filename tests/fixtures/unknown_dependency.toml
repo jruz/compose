@@ -1,4 +1,0 @@
-[[process]]
-name = "app"
-command = "echo hello"
-depends_on = ["nonexistent"]

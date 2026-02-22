@@ -1,0 +1,9 @@
+process:
+  - name: support
+    command: "exec sleep 10"
+    depends_on: []
+
+  - name: main
+    command: "echo $FROM_FILE && exit 0"
+    depends_on: []
+    env_file: tests/fixtures/test.env
