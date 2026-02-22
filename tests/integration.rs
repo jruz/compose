@@ -156,6 +156,22 @@ mod tests {
     }
 
     #[test]
+    fn inline_env_vars() {
+        let output = run_fixture("env_inline.toml", "run");
+        let stdout = stdout_text(&output);
+        assert_eq!(
+            output.status.code(),
+            Some(0_i32),
+            "stdout: {stdout}\nstderr: {}",
+            stderr_text(&output)
+        );
+        assert!(
+            stdout.contains("hello-from-env"),
+            "expected env var value in stdout\nstdout: {stdout}"
+        );
+    }
+
+    #[test]
     fn validation_duplicate_names() {
         let output = run_fixture("duplicate_names.toml", "run");
         assert_ne!(output.status.code(), Some(0_i32));

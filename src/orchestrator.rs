@@ -143,8 +143,14 @@ async fn start_all(
 
         let style = formatter::lookup_style(fmt_ctx, name)?;
         let pad_width = formatter::context_pad_width(fmt_ctx);
-        let (child, stderr_buf) =
-            process::spawn(name, &proc_def.command, pad_width, style, log_tx.clone())?;
+        let (child, stderr_buf) = process::spawn(
+            name,
+            &proc_def.command,
+            &proc_def.env,
+            pad_width,
+            style,
+            log_tx.clone(),
+        )?;
         children.push((name.clone(), child));
         stderr_buffers.push((name.clone(), stderr_buf));
 

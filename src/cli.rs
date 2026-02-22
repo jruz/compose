@@ -26,11 +26,14 @@ Config schema:
   name = \"app\"
   command = \"./my-server\"
   depends_on = [\"db\"]
+  [process.env]
+  DATABASE_URL = \"postgres://localhost/mydb\"
 
 Fields:
   name          Process name (must be unique)
   command       Shell command to run
   depends_on    List of process names that must be healthy first
+  env           Optional table of environment variables
   health        Optional health check (command, interval_secs, timeout_secs)"
 )]
 pub struct Cli {
