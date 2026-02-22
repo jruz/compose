@@ -172,6 +172,38 @@ mod tests {
     }
 
     #[test]
+    fn env_file_loads_vars() {
+        let output = run_fixture("env_file.toml", "run");
+        let stdout = stdout_text(&output);
+        assert_eq!(
+            output.status.code(),
+            Some(0_i32),
+            "stdout: {stdout}\nstderr: {}",
+            stderr_text(&output)
+        );
+        assert!(
+            stdout.contains("loaded-from-env-file"),
+            "expected env file value in stdout\nstdout: {stdout}"
+        );
+    }
+
+    #[test]
+    fn env_inline_overrides_env_file() {
+        let output = run_fixture("env_file_override.toml", "run");
+        let stdout = stdout_text(&output);
+        assert_eq!(
+            output.status.code(),
+            Some(0_i32),
+            "stdout: {stdout}\nstderr: {}",
+            stderr_text(&output)
+        );
+        assert!(
+            stdout.contains("inline-wins"),
+            "expected inline env to override env_file\nstdout: {stdout}"
+        );
+    }
+
+    #[test]
     fn validation_duplicate_names() {
         let output = run_fixture("duplicate_names.toml", "run");
         assert_ne!(output.status.code(), Some(0_i32));
