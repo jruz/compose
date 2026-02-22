@@ -1,0 +1,9 @@
+[[process]]
+name = "server"
+command = "exec sleep 60"
+depends_on = []
+
+[[process]]
+name = "worker"
+command = "exec sleep 60"
+depends_on = []
