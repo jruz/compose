@@ -1,8 +1,6 @@
-process:
-  - name: crasher
+processes:
+  crasher:
     command: "echo >&2 'ERROR: something went wrong' && echo >&2 'FATAL: cannot continue' && exit 1"
-    depends_on: []
 
-  - name: main
+  main:
     command: "exec sleep 10"
-    depends_on: []

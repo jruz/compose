@@ -1,8 +1,6 @@
-process:
-  - name: support
+processes:
+  support:
     command: "exec sleep 10"
-    depends_on: []
 
-  - name: main
+  main:
     command: "exit 42"
-    depends_on: []

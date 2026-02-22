@@ -1,15 +1,13 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use indexmap::IndexMap;
 use serde::Deserialize;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("circular dependency detected involving: {0}")]
     CircularDependency(String),
-
-    #[error("duplicate process name: {0}")]
-    DuplicateName(String),
 
     #[error("malformed env file {path} at line {line_number}: {line}")]
     EnvFileMalformed {
@@ -39,7 +37,7 @@ pub enum Error {
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub process: Vec<ProcessDef>,
+    pub processes: IndexMap<String, ProcessDef>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,12 +50,12 @@ pub struct HealthCheck {
 #[derive(Debug, Deserialize)]
 pub struct ProcessDef {
     pub command: String,
+    #[serde(default)]
     pub depends_on: Vec<String>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
     pub env_file: Option<String>,
     pub health: Option<HealthCheck>,
-    pub name: String,
 }
 
 pub fn load(path: &Path) -> Result<Config, Error> {
@@ -103,38 +101,23 @@ pub fn parse_env_file(path: &Path) -> Result<BTreeMap<String, String>, Error> {
 }
 
 fn validate(config: &Config) -> Result<(), Error> {
-    if config.process.is_empty() {
+    if config.processes.is_empty() {
         return Err(Error::NoProcesses);
     }
 
-    check_duplicate_names(config)?;
     check_unknown_dependencies(config)?;
     check_circular_dependencies(config)?;
 
     Ok(())
 }
 
-fn check_duplicate_names(config: &Config) -> Result<(), Error> {
-    let mut seen = HashSet::new();
-    for proc in &config.process {
-        if !seen.insert(&proc.name) {
-            return Err(Error::DuplicateName(proc.name.clone()));
-        }
-    }
-    Ok(())
-}
-
 fn check_unknown_dependencies(config: &Config) -> Result<(), Error> {
-    let names: HashSet<&str> = config
-        .process
-        .iter()
-        .map(|proc| proc.name.as_str())
-        .collect();
-    for proc in &config.process {
-        for dep in &proc.depends_on {
+    let names: HashSet<&str> = config.processes.keys().map(String::as_str).collect();
+    for (name, proc_def) in &config.processes {
+        for dep in &proc_def.depends_on {
             if !names.contains(dep.as_str()) {
                 return Err(Error::UnknownDependency {
-                    process: proc.name.clone(),
+                    process: name.clone(),
                     dependency: dep.clone(),
                 });
             }
@@ -145,12 +128,12 @@ fn check_unknown_dependencies(config: &Config) -> Result<(), Error> {
 
 fn check_circular_dependencies(config: &Config) -> Result<(), Error> {
     let adj: HashMap<&str, Vec<&str>> = config
-        .process
+        .processes
         .iter()
-        .map(|proc| {
+        .map(|(name, proc_def)| {
             (
-                proc.name.as_str(),
-                proc.depends_on.iter().map(String::as_str).collect(),
+                name.as_str(),
+                proc_def.depends_on.iter().map(String::as_str).collect(),
             )
         })
         .collect();
@@ -158,9 +141,9 @@ fn check_circular_dependencies(config: &Config) -> Result<(), Error> {
     let mut visited = HashSet::new();
     let mut in_stack = HashSet::new();
 
-    for proc in &config.process {
-        if !visited.contains(proc.name.as_str()) {
-            detect_cycle(proc.name.as_str(), &adj, &mut visited, &mut in_stack)?;
+    for name in config.processes.keys() {
+        if !visited.contains(name.as_str()) {
+            detect_cycle(name.as_str(), &adj, &mut visited, &mut in_stack)?;
         }
     }
 

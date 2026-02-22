@@ -204,13 +204,6 @@ mod tests {
     }
 
     #[test]
-    fn validation_duplicate_names() {
-        let output = run_fixture("duplicate_names.yaml", "run");
-        assert_ne!(output.status.code(), Some(0_i32));
-        assert!(stderr_text(&output).contains("duplicate"));
-    }
-
-    #[test]
     fn validation_unknown_dependency() {
         let output = run_fixture("unknown_dependency.yaml", "run");
         assert_ne!(output.status.code(), Some(0_i32));
