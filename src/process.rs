@@ -31,7 +31,6 @@ pub fn spawn(
     name: &str,
     command: &str,
     env: &BTreeMap<String, String>,
-    pad_width: usize,
     style: Style,
     log_tx: mpsc::UnboundedSender<String>,
 ) -> Result<(tokio::process::Child, StderrBuffer), Error> {
@@ -56,7 +55,7 @@ pub fn spawn(
     let stderr_buffer: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 
     if let Some(stdout) = stdout {
-        let tag = formatter::make_tag(name, pad_width, style);
+        let tag = formatter::make_tag(name, style);
         tokio::spawn(stream_lines(
             tag,
             BufReader::new(stdout),
@@ -66,7 +65,7 @@ pub fn spawn(
     }
 
     if let Some(stderr) = stderr {
-        let tag = formatter::make_tag(name, pad_width, style);
+        let tag = formatter::make_tag(name, style);
         tokio::spawn(stream_lines(
             tag,
             BufReader::new(stderr),

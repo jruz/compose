@@ -10,7 +10,6 @@ const COLORS: &[fn() -> Style] = &[
 ];
 
 pub struct Context {
-    pad_width: usize,
     styles: Vec<(String, Style)>,
 }
 
@@ -51,17 +50,15 @@ pub enum Event<'ev> {
 }
 
 pub fn build_context(names: &[String]) -> Option<Context> {
-    let pad_width = names.iter().map(String::len).max()?;
+    if names.is_empty() {
+        return None;
+    }
     let styles = names
         .iter()
         .enumerate()
         .map(|(idx, name)| (name.clone(), color_for_index(idx)))
         .collect();
-    Some(Context { pad_width, styles })
-}
-
-pub fn context_pad_width(ctx: &Context) -> usize {
-    ctx.pad_width
+    Some(Context { styles })
 }
 
 pub fn lookup_style(ctx: &Context, name: &str) -> Result<Style, Error> {
@@ -72,15 +69,14 @@ pub fn lookup_style(ctx: &Context, name: &str) -> Result<Style, Error> {
         .ok_or_else(|| Error::UnknownProcess(name.to_string()))
 }
 
-pub fn make_tag(name: &str, pad_width: usize, style: Style) -> String {
-    let padded = format!("{name:pad_width$}");
-    format!("[{}]", padded.style(style))
+pub fn make_tag(name: &str, style: Style) -> String {
+    format!("[{}]", name.style(style))
 }
 
 pub fn render(ctx: &Context, event: &Event<'_>) -> Result<String, Error> {
     let name = event_name(event);
     let style = lookup_style(ctx, name)?;
-    let tag = make_tag(name, ctx.pad_width, style);
+    let tag = make_tag(name, style);
 
     let line = match event {
         Event::Crashed { code, .. } => format!("{tag} crashed with code {code}"),
