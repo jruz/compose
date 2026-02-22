@@ -1,18 +1,22 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::os::unix::process::ExitStatusExt as _;
+use std::path::Path;
 use std::time::Duration;
 
 use tokio::signal;
 use tokio::sync::mpsc;
 
 use crate::cli::Command;
-use crate::config::Config;
+use crate::config::{self, Config};
 use crate::formatter;
 use crate::health;
 use crate::process;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error(transparent)]
+    Config(#[from] config::Error),
+
     #[error("dependency {dependency} not healthy when starting {process}")]
     DependencyNotHealthy { dependency: String, process: String },
 
@@ -141,12 +145,13 @@ async fn start_all(
             },
         )?;
 
+        let env = resolve_env(proc_def)?;
         let style = formatter::lookup_style(fmt_ctx, name)?;
         let pad_width = formatter::context_pad_width(fmt_ctx);
         let (child, stderr_buf) = process::spawn(
             name,
             &proc_def.command,
-            &proc_def.env,
+            &env,
             pad_width,
             style,
             log_tx.clone(),
@@ -357,6 +362,17 @@ fn spawn_child_watcher(
         let result = child.wait().await;
         let _send = tx.send(ExitEvent { name, result });
     })
+}
+
+fn resolve_env(proc_def: &config::ProcessDef) -> Result<BTreeMap<String, String>, config::Error> {
+    let mut env = match &proc_def.env_file {
+        Some(path) => config::parse_env_file(Path::new(path))?,
+        None => BTreeMap::new(),
+    };
+    for (key, value) in &proc_def.env {
+        env.insert(key.clone(), value.clone());
+    }
+    Ok(env)
 }
 
 fn emit(

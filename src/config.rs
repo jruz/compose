@@ -11,6 +11,13 @@ pub enum Error {
     #[error("duplicate process name: {0}")]
     DuplicateName(String),
 
+    #[error("malformed env file {path} at line {line_number}: {line}")]
+    EnvFileMalformed {
+        path: PathBuf,
+        line_number: usize,
+        line: String,
+    },
+
     #[error("failed to read {path}: {source}")]
     FileRead {
         path: PathBuf,
@@ -48,6 +55,7 @@ pub struct ProcessDef {
     pub depends_on: Vec<String>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    pub env_file: Option<String>,
     pub health: Option<HealthCheck>,
     pub name: String,
 }
@@ -66,6 +74,32 @@ pub fn load(path: &Path) -> Result<Config, Error> {
     validate(&config)?;
 
     Ok(config)
+}
+
+pub fn parse_env_file(path: &Path) -> Result<BTreeMap<String, String>, Error> {
+    let content = std::fs::read_to_string(path).map_err(|source| Error::FileRead {
+        path: path.to_path_buf(),
+        source,
+    })?;
+
+    content
+        .lines()
+        .enumerate()
+        .filter(|(_i, line)| {
+            let trimmed = line.trim();
+            !trimmed.is_empty() && !trimmed.starts_with('#')
+        })
+        .try_fold(BTreeMap::new(), |mut acc, (i, line)| {
+            let (key, value) = line
+                .split_once('=')
+                .ok_or_else(|| Error::EnvFileMalformed {
+                    path: path.to_path_buf(),
+                    line_number: i + 1,
+                    line: line.to_string(),
+                })?;
+            acc.insert(key.trim().to_string(), value.trim().to_string());
+            Ok(acc)
+        })
 }
 
 fn validate(config: &Config) -> Result<(), Error> {

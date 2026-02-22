@@ -1,0 +1,12 @@
+[[process]]
+name = "support"
+command = "exec sleep 10"
+depends_on = []
+
+[[process]]
+name = "main"
+command = "echo $OVERRIDE_ME && exit 0"
+depends_on = []
+env_file = "tests/fixtures/test.env"
+[process.env]
+OVERRIDE_ME = "inline-wins"
