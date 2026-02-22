@@ -62,27 +62,61 @@ mod tests {
     #[test]
     fn run_support_crashes_exits_one() {
         let output = run_fixture("run_support_crashes.toml", "run");
+        let stdout = stdout_text(&output);
         assert_eq!(
             output.status.code(),
             Some(1_i32),
-            "stdout: {}\nstderr: {}",
-            stdout_text(&output),
+            "stdout: {stdout}\nstderr: {}",
             stderr_text(&output)
         );
-        assert!(stdout_text(&output).contains("crashed"));
+        assert!(
+            stdout.contains("crashed"),
+            "expected crashed in stdout\nstdout: {stdout}"
+        );
+        assert!(
+            stdout.contains("killing (crasher crashed)"),
+            "expected killing reason\nstdout: {stdout}"
+        );
     }
 
     #[test]
     fn up_any_exit_triggers_shutdown() {
         let output = run_fixture("up_any_exit.toml", "up");
+        let stdout = stdout_text(&output);
         assert_eq!(
             output.status.code(),
             Some(1_i32),
-            "stdout: {}\nstderr: {}",
-            stdout_text(&output),
+            "stdout: {stdout}\nstderr: {}",
             stderr_text(&output)
         );
-        assert!(stdout_text(&output).contains("crashed"));
+        assert!(
+            stdout.contains("crashed"),
+            "expected crashed in stdout\nstdout: {stdout}"
+        );
+        assert!(
+            stdout.contains("killing (short crashed)"),
+            "expected killing reason\nstdout: {stdout}"
+        );
+    }
+
+    #[test]
+    fn crash_stderr_summary() {
+        let output = run_fixture("run_stderr_summary.toml", "run");
+        let stdout = stdout_text(&output);
+        assert_eq!(
+            output.status.code(),
+            Some(1_i32),
+            "stdout: {stdout}\nstderr: {}",
+            stderr_text(&output)
+        );
+        assert!(
+            stdout.contains("--- last stderr ---"),
+            "expected stderr summary header\nstdout: {stdout}"
+        );
+        assert!(
+            stdout.contains("FATAL: cannot continue"),
+            "expected stderr content in summary\nstdout: {stdout}"
+        );
     }
 
     #[test]

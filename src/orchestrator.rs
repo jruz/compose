@@ -50,6 +50,9 @@ pub enum Error {
     #[error("failed to register signal handler: {source}")]
     SignalHandler { source: std::io::Error },
 
+    #[error("stderr buffer poisoned for process {name}: {reason}")]
+    StderrBufferPoisoned { name: String, reason: String },
+
     #[error("process {name} exited with unknown status")]
     UnknownExitStatus { name: String },
 }
@@ -64,6 +67,8 @@ enum ShutdownStrategy {
     MainProcess(String),
 }
 
+type StderrBuffers = Vec<(String, process::StderrBuffer)>;
+
 pub async fn run(
     config: Config,
     mode: Command,
@@ -76,7 +81,7 @@ pub async fn run(
         .collect();
     let fmt_ctx = formatter::build_context(&names).ok_or(Error::NoProcesses)?;
 
-    let children = start_all(&config, &fmt_ctx, &log_tx).await?;
+    let (children, stderr_buffers) = start_all(&config, &fmt_ctx, &log_tx).await?;
 
     let shutdown = match mode {
         Command::Run => ShutdownStrategy::MainProcess(
@@ -90,15 +95,24 @@ pub async fn run(
         Command::Up => ShutdownStrategy::AnyExit,
     };
 
-    manage_lifecycle(children, &names, &fmt_ctx, shutdown, &log_tx).await
+    manage_lifecycle(
+        children,
+        &stderr_buffers,
+        &names,
+        &fmt_ctx,
+        shutdown,
+        &log_tx,
+    )
+    .await
 }
 
 async fn start_all(
     config: &Config,
     fmt_ctx: &formatter::Context,
     log_tx: &mpsc::UnboundedSender<String>,
-) -> Result<Vec<(String, tokio::process::Child)>, Error> {
+) -> Result<(Vec<(String, tokio::process::Child)>, StderrBuffers), Error> {
     let mut children: Vec<(String, tokio::process::Child)> = Vec::new();
+    let mut stderr_buffers: StderrBuffers = Vec::new();
     let mut healthy_set: HashSet<String> = HashSet::new();
     let start_order = resolve_start_order(config);
 
@@ -129,8 +143,10 @@ async fn start_all(
 
         let style = formatter::lookup_style(fmt_ctx, name)?;
         let pad_width = formatter::context_pad_width(fmt_ctx);
-        let child = process::spawn(name, &proc_def.command, pad_width, style, log_tx.clone())?;
+        let (child, stderr_buf) =
+            process::spawn(name, &proc_def.command, pad_width, style, log_tx.clone())?;
         children.push((name.clone(), child));
+        stderr_buffers.push((name.clone(), stderr_buf));
 
         if let Some(health_check) = &proc_def.health {
             let interval = Duration::from_secs(health_check.interval_secs);
@@ -143,11 +159,12 @@ async fn start_all(
         healthy_set.insert(name.clone());
     }
 
-    Ok(children)
+    Ok((children, stderr_buffers))
 }
 
 async fn manage_lifecycle(
     children: Vec<(String, tokio::process::Child)>,
+    stderr_buffers: &StderrBuffers,
     all_names: &[String],
     fmt_ctx: &formatter::Context,
     shutdown: ShutdownStrategy,
@@ -179,15 +196,15 @@ async fn manage_lifecycle(
                 .filter(|nm| nm.as_str() != event.name)
                 .cloned()
                 .collect();
-            handle_exit_result(&event.name, code, &shutdown, &remaining, fmt_ctx, log_tx)
+            handle_exit_result(&event.name, code, &shutdown, &remaining, stderr_buffers, fmt_ctx, log_tx)
         }
         _ = sigterm.recv() => {
-            emit_killing_all(all_names, fmt_ctx, log_tx)?;
+            emit_killing_all(all_names, "signal received", fmt_ctx, log_tx)?;
             Ok(130_u8)
         }
         result = signal::ctrl_c() => {
             result.map_err(|source| Error::SignalHandler { source })?;
-            emit_killing_all(all_names, fmt_ctx, log_tx)?;
+            emit_killing_all(all_names, "signal received", fmt_ctx, log_tx)?;
             Ok(130_u8)
         }
     };
@@ -204,18 +221,21 @@ fn handle_exit_result(
     code: u8,
     shutdown: &ShutdownStrategy,
     remaining: &[String],
+    stderr_buffers: &StderrBuffers,
     fmt_ctx: &formatter::Context,
     log_tx: &mpsc::UnboundedSender<String>,
 ) -> Result<u8, Error> {
+    let reason = format!("{name} crashed");
     match shutdown {
         ShutdownStrategy::MainProcess(main_name) if main_name == name => {
             emit(log_tx, fmt_ctx, &formatter::Event::Exited { name, code })?;
-            emit_killing_all(remaining, fmt_ctx, log_tx)?;
+            emit_killing_all(remaining, &format!("{name} exited"), fmt_ctx, log_tx)?;
             Ok(code)
         }
         ShutdownStrategy::MainProcess(_) | ShutdownStrategy::AnyExit => {
             emit(log_tx, fmt_ctx, &formatter::Event::Crashed { name, code })?;
-            emit_killing_all(remaining, fmt_ctx, log_tx)?;
+            emit_killing_all(remaining, &reason, fmt_ctx, log_tx)?;
+            emit_stderr_summary(name, stderr_buffers, fmt_ctx, log_tx)?;
             Ok(1_u8)
         }
     }
@@ -241,11 +261,44 @@ fn exit_code_from_status(name: &str, status: std::process::ExitStatus) -> Result
 
 fn emit_killing_all(
     names: &[String],
+    reason: &str,
     fmt_ctx: &formatter::Context,
     log_tx: &mpsc::UnboundedSender<String>,
 ) -> Result<(), Error> {
     for name in names {
-        emit(log_tx, fmt_ctx, &formatter::Event::Killing { name })?;
+        emit(log_tx, fmt_ctx, &formatter::Event::Killing { name, reason })?;
+    }
+    Ok(())
+}
+
+fn emit_stderr_summary(
+    name: &str,
+    stderr_buffers: &StderrBuffers,
+    fmt_ctx: &formatter::Context,
+    log_tx: &mpsc::UnboundedSender<String>,
+) -> Result<(), Error> {
+    let (_name, buf) = stderr_buffers
+        .iter()
+        .find(|(nm, _buf)| nm == name)
+        .ok_or_else(|| Error::ProcessNotFound {
+            name: name.to_string(),
+        })?;
+    let lines: Vec<String> = buf
+        .lock()
+        .map_err(|poison| Error::StderrBufferPoisoned {
+            name: name.to_string(),
+            reason: poison.to_string(),
+        })?
+        .clone();
+    if !lines.is_empty() {
+        emit(
+            log_tx,
+            fmt_ctx,
+            &formatter::Event::Summary {
+                name,
+                stderr_lines: &lines,
+            },
+        )?;
     }
     Ok(())
 }
