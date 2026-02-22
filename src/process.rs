@@ -14,6 +14,12 @@ const COLORS: &[fn() -> Style] = &[
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("log channel closed: {0}")]
+    LogChannelClosed(mpsc::error::SendError<String>),
+
+    #[error("pipe read failed: {0}")]
+    PipeRead(std::io::Error),
+
     #[error("failed to spawn process {name}: {source}")]
     Spawn {
         name: String,
@@ -85,20 +91,16 @@ async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
     tag: String,
     reader: BufReader<R>,
     log_tx: mpsc::UnboundedSender<String>,
-) {
+) -> Result<(), Error> {
     let mut lines = reader.lines();
     loop {
         match lines.next_line().await {
-            Ok(Some(line)) => {
-                if log_tx.send(format!("{tag} {line}")).is_err() {
-                    break;
-                }
-            }
+            Ok(Some(line)) => log_tx
+                .send(format!("{tag} {line}"))
+                .map_err(Error::LogChannelClosed)?,
             Ok(None) => break,
-            Err(err) => {
-                let _report = log_tx.send(format!("{tag} pipe error: {err}"));
-                break;
-            }
+            Err(pipe_err) => return Err(Error::PipeRead(pipe_err)),
         }
     }
+    Ok(())
 }

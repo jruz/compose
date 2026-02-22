@@ -20,8 +20,12 @@ pub enum Error {
     #[error(transparent)]
     Health(#[from] health::Error),
 
-    #[error("exit code {code} out of u8 range for process {name}")]
-    InvalidExitCode { code: i32, name: String },
+    #[error("exit code {code} out of u8 range for process {name}: {source}")]
+    InvalidExitCode {
+        code: i32,
+        name: String,
+        source: std::num::TryFromIntError,
+    },
 
     #[error("failed to kill process {name}: {source}")]
     Kill {
@@ -29,8 +33,8 @@ pub enum Error {
         source: std::io::Error,
     },
 
-    #[error("log channel closed")]
-    LogChannelClosed,
+    #[error("log channel closed: {0}")]
+    LogChannelClosed(mpsc::error::SendError<String>),
 
     #[error("no processes defined")]
     NoProcesses,
@@ -125,16 +129,16 @@ pub async fn run(
 
 fn exit_code_from_status(name: &str, status: std::process::ExitStatus) -> Result<u8, Error> {
     match (status.code(), status.signal()) {
-        (Some(code), _) => u8::try_from(code).map_err(|_try_err| Error::InvalidExitCode {
+        (Some(code), _) => u8::try_from(code).map_err(|source| Error::InvalidExitCode {
             code,
             name: name.to_string(),
+            source,
         }),
-        (None, Some(sig)) => {
-            u8::try_from(128_i32 + sig).map_err(|_try_err| Error::InvalidExitCode {
-                code: 128_i32 + sig,
-                name: name.to_string(),
-            })
-        }
+        (None, Some(sig)) => u8::try_from(128_i32 + sig).map_err(|source| Error::InvalidExitCode {
+            code: 128_i32 + sig,
+            name: name.to_string(),
+            source,
+        }),
         (None, None) => Err(Error::UnknownExitStatus {
             name: name.to_string(),
         }),
@@ -239,9 +243,7 @@ fn resolve_start_order(config: &Config) -> Vec<usize> {
 }
 
 fn send_log(log_tx: &mpsc::UnboundedSender<String>, msg: String) -> Result<(), Error> {
-    log_tx
-        .send(msg)
-        .map_err(|_send_err| Error::LogChannelClosed)
+    log_tx.send(msg).map_err(Error::LogChannelClosed)
 }
 
 fn spawn_signal_listener(flag: Arc<AtomicBool>) -> Result<(), Error> {
@@ -256,10 +258,9 @@ fn spawn_signal_listener(flag: Arc<AtomicBool>) -> Result<(), Error> {
     });
 
     tokio::spawn(async move {
-        match signal::ctrl_c().await {
-            Ok(()) => flag.store(true, Ordering::SeqCst),
-            Err(_err) => {}
-        }
+        let result = signal::ctrl_c().await;
+        flag.store(true, Ordering::SeqCst);
+        result
     });
 
     Ok(())
