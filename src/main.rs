@@ -1,32 +1,50 @@
 mod cli;
 mod config;
-mod error;
+mod health;
+mod orchestrator;
+mod process;
+
+use std::process::ExitCode;
 
 use clap::Parser as _;
-use color_eyre::Result;
+use tokio::sync::mpsc;
 
 use crate::cli::Cli;
 
-fn main() -> Result<()> {
-    color_eyre::install()?;
+#[tokio::main]
+async fn main() -> ExitCode {
+    if let Err(err) = color_eyre::install() {
+        eprintln!("failed to install color_eyre: {err}");
+        return ExitCode::from(1);
+    }
 
     let cli = Cli::parse();
-    let config = config::load(&cli.file)?;
 
-    match cli.command {
-        cli::Command::Run => println!("run mode"),
-        cli::Command::Up => println!("up mode"),
+    let config = match config::load(&cli.file) {
+        Ok(config) => config,
+        Err(err) => {
+            eprintln!("{err}");
+            return ExitCode::from(1);
+        }
+    };
+
+    let (log_tx, mut log_rx) = mpsc::unbounded_channel();
+
+    let orchestrator = tokio::spawn(orchestrator::run(config, cli.command, log_tx));
+
+    while let Some(line) = log_rx.recv().await {
+        println!("{line}");
     }
 
-    println!("loaded {} processes:", config.process.len());
-    for proc in &config.process {
-        let health = proc.health.as_deref().unwrap_or("none");
-        let deps = proc.depends_on.join(", ");
-        println!(
-            "  {} -> {} (health: {health}, depends_on: [{deps}])",
-            proc.name, proc.command,
-        );
+    match orchestrator.await {
+        Ok(Ok(code)) => ExitCode::from(code),
+        Ok(Err(err)) => {
+            eprintln!("{err}");
+            ExitCode::from(1)
+        }
+        Err(join_err) => {
+            eprintln!("orchestrator panicked: {join_err}");
+            ExitCode::from(1)
+        }
     }
-
-    Ok(())
 }

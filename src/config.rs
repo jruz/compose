@@ -1,9 +1,34 @@
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::error::Error;
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("circular dependency detected involving: {0}")]
+    CircularDependency(String),
+
+    #[error("duplicate process name: {0}")]
+    DuplicateName(String),
+
+    #[error("failed to read {path}: {source}")]
+    FileRead {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("no processes defined")]
+    NoProcesses,
+
+    #[error("failed to parse TOML from {path}: {source}")]
+    TomlParse {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
+
+    #[error("process {process} depends on unknown process: {dependency}")]
+    UnknownDependency { dependency: String, process: String },
+}
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -11,11 +36,17 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct HealthCheck {
+    pub command: String,
+    pub interval_secs: u64,
+    pub timeout_secs: u64,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ProcessDef {
     pub command: String,
-    #[serde(default)]
     pub depends_on: Vec<String>,
-    pub health: Option<String>,
+    pub health: Option<HealthCheck>,
     pub name: String,
 }
 
