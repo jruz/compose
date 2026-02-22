@@ -21,7 +21,7 @@ async fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
-    let config = match config::load(&cli.file) {
+    let config = match config::load(cli::config_path(&cli.command)) {
         Ok(config) => config,
         Err(err) => {
             eprintln!("{err}");

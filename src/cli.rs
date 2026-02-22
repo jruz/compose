@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -28,15 +28,24 @@ Config schema:
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
+}
 
+#[derive(Debug, Args)]
+pub struct ConfigArg {
     #[arg(long, help = "Path to the YAML compose file")]
-    pub file: PathBuf,
+    pub config: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
     #[command(about = "Run all processes, exit with the last process's exit code")]
-    Run,
+    Run(ConfigArg),
     #[command(about = "Keep all processes running, any exit triggers shutdown")]
-    Up,
+    Up(ConfigArg),
+}
+
+pub fn config_path(command: &Command) -> &PathBuf {
+    match command {
+        Command::Run(args) | Command::Up(args) => &args.config,
+    }
 }
