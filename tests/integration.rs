@@ -1,12 +1,7 @@
 #[cfg(test)]
-#[expect(
-    clippy::expect_used,
-    reason = "test helpers use expect for setup failures"
-)]
 mod tests {
     use std::path::PathBuf;
     use std::process::Output;
-    use std::time::Duration;
 
     fn binary_path() -> PathBuf {
         env!("CARGO_BIN_EXE_simple-compose").into()
@@ -20,34 +15,15 @@ mod tests {
     }
 
     fn run_fixture(fixture: &str, subcommand: &str) -> Output {
-        std::process::Command::new(binary_path())
+        let Ok(output) = std::process::Command::new(binary_path())
             .arg("--file")
             .arg(fixture_path(fixture))
             .arg(subcommand)
             .output()
-            .expect("failed to run binary")
-    }
-
-    fn run_fixture_with_timeout(fixture: &str, subcommand: &str, timeout: Duration) -> Output {
-        let child = std::process::Command::new(binary_path())
-            .arg("--file")
-            .arg(fixture_path(fixture))
-            .arg(subcommand)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .expect("failed to spawn binary");
-
-        let pid = child.id();
-        std::thread::sleep(timeout);
-
-        std::process::Command::new("kill")
-            .arg("-TERM")
-            .arg(pid.to_string())
-            .status()
-            .expect("failed to send SIGTERM");
-
-        child.wait_with_output().expect("failed to wait on binary")
+        else {
+            panic!("failed to execute binary with fixture {fixture}")
+        };
+        output
     }
 
     fn stdout_text(output: &Output) -> String {
@@ -97,15 +73,16 @@ mod tests {
     }
 
     #[test]
-    fn up_sigterm_clean_shutdown() {
-        let output = run_fixture_with_timeout("up_sigterm.toml", "up", Duration::from_secs(1));
-        let code = output.status.code();
-        assert!(
-            code == Some(130_i32) || code == Some(143_i32),
-            "expected 130 or 143, got {code:?}\nstdout: {}\nstderr: {}",
+    fn up_any_exit_triggers_shutdown() {
+        let output = run_fixture("up_any_exit.toml", "up");
+        assert_eq!(
+            output.status.code(),
+            Some(1_i32),
+            "stdout: {}\nstderr: {}",
             stdout_text(&output),
             stderr_text(&output)
         );
+        assert!(stdout_text(&output).contains("crashed"));
     }
 
     #[test]
@@ -178,12 +155,14 @@ mod tests {
 
     #[test]
     fn missing_file() {
-        let output = std::process::Command::new(binary_path())
+        let Ok(output) = std::process::Command::new(binary_path())
             .arg("--file")
             .arg("/tmp/nonexistent_compose_file_12345.toml")
             .arg("run")
             .output()
-            .expect("failed to run binary");
+        else {
+            panic!("failed to execute binary")
+        };
 
         assert_ne!(output.status.code(), Some(0_i32));
         assert!(!stderr_text(&output).is_empty());

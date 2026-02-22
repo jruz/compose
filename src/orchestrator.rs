@@ -157,14 +157,12 @@ async fn manage_lifecycle(
         .map_err(|source| Error::SignalHandler { source })?;
 
     let (exit_tx, mut exit_rx) = mpsc::unbounded_channel::<ExitEvent>();
-    let mut join_set = tokio::task::JoinSet::new();
+    let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
-    for (name, mut child) in children {
+    for (name, child) in children {
         let tx = exit_tx.clone();
-        join_set.spawn(async move {
-            let result = child.wait().await;
-            let _send = tx.send(ExitEvent { name, result });
-        });
+        let handle = spawn_child_watcher(tx, name, child);
+        handles.push(handle);
     }
 
     drop(exit_tx);
@@ -194,7 +192,9 @@ async fn manage_lifecycle(
         }
     };
 
-    join_set.abort_all();
+    for handle in &handles {
+        handle.abort();
+    }
 
     result
 }
@@ -287,6 +287,17 @@ fn resolve_start_order(config: &Config) -> Vec<String> {
     }
 
     order
+}
+
+fn spawn_child_watcher(
+    tx: mpsc::UnboundedSender<ExitEvent>,
+    name: String,
+    mut child: tokio::process::Child,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let result = child.wait().await;
+        let _send = tx.send(ExitEvent { name, result });
+    })
 }
 
 fn emit(
