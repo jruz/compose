@@ -1,12 +1,11 @@
-process:
-  - name: db
+processes:
+  db:
     command: "echo db-started && exec sleep 10"
-    depends_on: []
     health:
       command: "true"
       interval_secs: 1
       timeout_secs: 5
 
-  - name: app
+  app:
     command: "echo app-started && exit 0"
     depends_on: [db]

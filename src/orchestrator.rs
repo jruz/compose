@@ -78,11 +78,7 @@ pub async fn run(
     mode: Command,
     log_tx: mpsc::UnboundedSender<String>,
 ) -> Result<u8, Error> {
-    let names: Vec<String> = config
-        .process
-        .iter()
-        .map(|proc| proc.name.clone())
-        .collect();
+    let names: Vec<String> = config.processes.keys().cloned().collect();
     let fmt_ctx = formatter::build_context(&names).ok_or(Error::NoProcesses)?;
 
     let (children, stderr_buffers) = start_all(&config, &fmt_ctx, &log_tx).await?;
@@ -90,10 +86,10 @@ pub async fn run(
     let shutdown = match mode {
         Command::Run => ShutdownStrategy::MainProcess(
             config
-                .process
+                .processes
+                .keys()
                 .last()
                 .ok_or(Error::NoProcesses)?
-                .name
                 .clone(),
         ),
         Command::Up => ShutdownStrategy::AnyExit,
@@ -122,9 +118,8 @@ async fn start_all(
 
     for name in &start_order {
         let proc_def = config
-            .process
-            .iter()
-            .find(|proc| &proc.name == name)
+            .processes
+            .get(name)
             .ok_or_else(|| Error::ProcessNotFound { name: name.clone() })?;
 
         for dep in &proc_def.depends_on {
@@ -317,17 +312,13 @@ fn emit_stderr_summary(
 fn resolve_start_order(config: &Config) -> Vec<String> {
     let mut order: Vec<String> = Vec::new();
     let mut resolved: HashSet<&str> = HashSet::new();
-    let mut remaining: Vec<&str> = config
-        .process
-        .iter()
-        .map(|proc| proc.name.as_str())
-        .collect();
+    let mut remaining: Vec<&str> = config.processes.keys().map(String::as_str).collect();
 
     while !remaining.is_empty() {
         let mut progress = false;
 
         remaining.retain(|&name| {
-            let Some(proc_def) = config.process.iter().find(|proc| proc.name == name) else {
+            let Some(proc_def) = config.processes.get(name) else {
                 return false;
             };
             let all_deps_resolved = proc_def

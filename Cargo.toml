@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.5.60", features = ["derive"] }
 color-eyre = "0.6.3"
+indexmap = { version = "2.13.0", features = ["serde"] }
 owo-colors = "4.2.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yml = "0.0.12"

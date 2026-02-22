@@ -1,8 +1,6 @@
-process:
-  - name: short
+processes:
+  short:
     command: "sleep 0.1 && exit 0"
-    depends_on: []
 
-  - name: long
+  long:
     command: "exec sleep 60"
-    depends_on: []

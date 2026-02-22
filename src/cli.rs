@@ -13,17 +13,17 @@ Processes start in dependency order. Health checks gate dependent startup.
 
 Config schema:
 
-  process:
-    - name: <string>                # unique process name
-      command: <string>             # shell command to run
-      depends_on: [<string>, ...]   # processes that must be healthy first
-      env_file: <string>            # optional path to KEY=VALUE file
-      env:                          # optional env vars (overrides env_file)
+  processes:
+    <name>:                           # unique process name
+      command: <string>               # shell command to run
+      depends_on: [<string>, ...]     # processes that must be healthy first
+      env_file: <string>              # optional path to KEY=VALUE file
+      env:                            # optional env vars (overrides env_file)
         KEY: \"VALUE\"
-      health:                       # optional health check
-        command: <string>           # health check shell command
-        interval_secs: <int>        # seconds between retries
-        timeout_secs: <int>         # seconds before giving up"
+      health:                         # optional health check
+        command: <string>             # health check shell command
+        interval_secs: <int>          # seconds between retries
+        timeout_secs: <int>           # seconds before giving up"
 )]
 pub struct Cli {
     #[command(subcommand)]
