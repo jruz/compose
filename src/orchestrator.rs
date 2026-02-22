@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 use std::os::unix::process::ExitStatusExt as _;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tokio::signal;
@@ -19,6 +17,9 @@ pub enum Error {
     DependencyNotHealthy { dependency: String, process: String },
 
     #[error(transparent)]
+    Formatter(#[from] formatter::Error),
+
+    #[error(transparent)]
     Health(#[from] health::Error),
 
     #[error("exit code {code} out of u8 range for process {name}: {source}")]
@@ -26,12 +27,6 @@ pub enum Error {
         code: i32,
         name: String,
         source: std::num::TryFromIntError,
-    },
-
-    #[error("failed to kill process {name}: {source}")]
-    Kill {
-        name: String,
-        source: std::io::Error,
     },
 
     #[error("log channel closed: {0}")]
@@ -43,10 +38,7 @@ pub enum Error {
     #[error(transparent)]
     Process(#[from] process::Error),
 
-    #[error("process at index {index} not found in config")]
-    ProcessIndexOutOfBounds { index: usize },
-
-    #[error("process {name} not found in config")]
+    #[error("process {name} not found")]
     ProcessNotFound { name: String },
 
     #[error("failed to wait on process {name}: {source}")]
@@ -62,12 +54,14 @@ pub enum Error {
     UnknownExitStatus { name: String },
 }
 
-enum Event {
-    ProcessExited {
-        name: String,
-        status: std::process::ExitStatus,
-    },
-    Signal,
+struct ExitEvent {
+    name: String,
+    result: Result<std::process::ExitStatus, std::io::Error>,
+}
+
+enum ShutdownStrategy {
+    AnyExit,
+    MainProcess(String),
 }
 
 pub async fn run(
@@ -80,52 +74,146 @@ pub async fn run(
         .iter()
         .map(|proc| proc.name.clone())
         .collect();
-    let pad_width = formatter::pad_width(&names).ok_or(Error::NoProcesses)?;
+    let fmt_ctx = formatter::build_context(&names).ok_or(Error::NoProcesses)?;
 
-    let mut children: Vec<process::SpawnedProcess> = Vec::new();
+    let children = start_all(&config, &fmt_ctx, &log_tx).await?;
+
+    let shutdown = match mode {
+        Command::Run => ShutdownStrategy::MainProcess(
+            config
+                .process
+                .last()
+                .ok_or(Error::NoProcesses)?
+                .name
+                .clone(),
+        ),
+        Command::Up => ShutdownStrategy::AnyExit,
+    };
+
+    manage_lifecycle(children, &names, &fmt_ctx, shutdown, &log_tx).await
+}
+
+async fn start_all(
+    config: &Config,
+    fmt_ctx: &formatter::Context,
+    log_tx: &mpsc::UnboundedSender<String>,
+) -> Result<Vec<(String, tokio::process::Child)>, Error> {
+    let mut children: Vec<(String, tokio::process::Child)> = Vec::new();
     let mut healthy_set: HashSet<String> = HashSet::new();
+    let start_order = resolve_start_order(config);
 
-    let start_order = resolve_start_order(&config);
-
-    for idx in &start_order {
+    for name in &start_order {
         let proc_def = config
             .process
-            .get(*idx)
-            .ok_or(Error::ProcessIndexOutOfBounds { index: *idx })?;
-        let style = formatter::color_for_index(*idx);
-        let tag = formatter::make_tag(&proc_def.name, pad_width, style);
+            .iter()
+            .find(|proc| &proc.name == name)
+            .ok_or_else(|| Error::ProcessNotFound { name: name.clone() })?;
 
         for dep in &proc_def.depends_on {
             if !healthy_set.contains(dep) {
                 return Err(Error::DependencyNotHealthy {
                     dependency: dep.clone(),
-                    process: proc_def.name.clone(),
+                    process: name.clone(),
                 });
             }
         }
 
-        send_log(&log_tx, format!("{tag} starting: {}", proc_def.command))?;
-        let spawned = process::spawn(
-            &proc_def.name,
-            &proc_def.command,
-            pad_width,
-            style,
-            log_tx.clone(),
+        emit(
+            log_tx,
+            fmt_ctx,
+            &formatter::Event::Starting {
+                name,
+                command: &proc_def.command,
+            },
         )?;
-        children.push(spawned);
+
+        let style = formatter::lookup_style(fmt_ctx, name)?;
+        let pad_width = formatter::context_pad_width(fmt_ctx);
+        let child = process::spawn(name, &proc_def.command, pad_width, style, log_tx.clone())?;
+        children.push((name.clone(), child));
 
         if let Some(health_check) = &proc_def.health {
             let interval = Duration::from_secs(health_check.interval_secs);
             let timeout = Duration::from_secs(health_check.timeout_secs);
-            send_log(&log_tx, format!("{tag} waiting for health check..."))?;
-            health::wait_healthy(&proc_def.name, &health_check.command, interval, timeout).await?;
-            send_log(&log_tx, format!("{tag} healthy"))?;
+            emit(log_tx, fmt_ctx, &formatter::Event::WaitingHealth { name })?;
+            health::wait_healthy(name, &health_check.command, interval, timeout).await?;
+            emit(log_tx, fmt_ctx, &formatter::Event::Healthy { name })?;
         }
 
-        healthy_set.insert(proc_def.name.clone());
+        healthy_set.insert(name.clone());
     }
 
-    wait_for_completion(&mut children, &config, mode, pad_width, &log_tx).await
+    Ok(children)
+}
+
+async fn manage_lifecycle(
+    children: Vec<(String, tokio::process::Child)>,
+    all_names: &[String],
+    fmt_ctx: &formatter::Context,
+    shutdown: ShutdownStrategy,
+    log_tx: &mpsc::UnboundedSender<String>,
+) -> Result<u8, Error> {
+    let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
+        .map_err(|source| Error::SignalHandler { source })?;
+
+    let (exit_tx, mut exit_rx) = mpsc::unbounded_channel::<ExitEvent>();
+
+    for (name, mut child) in children {
+        let tx = exit_tx.clone();
+        tokio::spawn(async move {
+            let result = child.wait().await;
+            let _send = tx.send(ExitEvent { name, result });
+        });
+    }
+
+    drop(exit_tx);
+
+    tokio::select! {
+        Some(event) = exit_rx.recv() => {
+            let status = event.result.map_err(|source| Error::ProcessWait {
+                name: event.name.clone(),
+                source,
+            })?;
+            let code = exit_code_from_status(&event.name, status)?;
+            let remaining: Vec<String> = all_names
+                .iter()
+                .filter(|nm| nm.as_str() != event.name)
+                .cloned()
+                .collect();
+            handle_exit_result(&event.name, code, &shutdown, &remaining, fmt_ctx, log_tx)
+        }
+        _ = sigterm.recv() => {
+            emit_killing_all(all_names, fmt_ctx, log_tx)?;
+            Ok(130_u8)
+        }
+        result = signal::ctrl_c() => {
+            result.map_err(|source| Error::SignalHandler { source })?;
+            emit_killing_all(all_names, fmt_ctx, log_tx)?;
+            Ok(130_u8)
+        }
+    }
+}
+
+fn handle_exit_result(
+    name: &str,
+    code: u8,
+    shutdown: &ShutdownStrategy,
+    remaining: &[String],
+    fmt_ctx: &formatter::Context,
+    log_tx: &mpsc::UnboundedSender<String>,
+) -> Result<u8, Error> {
+    match shutdown {
+        ShutdownStrategy::MainProcess(main_name) if main_name == name => {
+            emit(log_tx, fmt_ctx, &formatter::Event::Exited { name, code })?;
+            emit_killing_all(remaining, fmt_ctx, log_tx)?;
+            Ok(code)
+        }
+        ShutdownStrategy::MainProcess(_) | ShutdownStrategy::AnyExit => {
+            emit(log_tx, fmt_ctx, &formatter::Event::Crashed { name, code })?;
+            emit_killing_all(remaining, fmt_ctx, log_tx)?;
+            Ok(1_u8)
+        }
+    }
 }
 
 fn exit_code_from_status(name: &str, status: std::process::ExitStatus) -> Result<u8, Error> {
@@ -146,78 +234,31 @@ fn exit_code_from_status(name: &str, status: std::process::ExitStatus) -> Result
     }
 }
 
-fn handle_process_exit(
-    children: &mut Vec<process::SpawnedProcess>,
-    config: &Config,
-    name: &str,
-    status: std::process::ExitStatus,
-    main_index: Option<usize>,
-    pad_width: usize,
-    log_tx: &mpsc::UnboundedSender<String>,
-) -> Result<u8, Error> {
-    let exited_index = config
-        .process
-        .iter()
-        .position(|proc| proc.name == name)
-        .ok_or_else(|| Error::ProcessNotFound {
-            name: name.to_string(),
-        })?;
-
-    let style = formatter::color_for_index(exited_index);
-    let tag = formatter::make_tag(name, pad_width, style);
-    let code = exit_code_from_status(name, status)?;
-
-    if Some(exited_index) == main_index {
-        send_log(log_tx, format!("{tag} exited with code {code}"))?;
-        kill_all(children, pad_width, log_tx)?;
-        return Ok(code);
-    }
-
-    send_log(log_tx, format!("{tag} crashed with code {code}"))?;
-    kill_all(children, pad_width, log_tx)?;
-    Ok(1_u8)
-}
-
-fn kill_all(
-    children: &mut Vec<process::SpawnedProcess>,
-    pad_width: usize,
+fn emit_killing_all(
+    names: &[String],
+    fmt_ctx: &formatter::Context,
     log_tx: &mpsc::UnboundedSender<String>,
 ) -> Result<(), Error> {
-    let mut first_error: Option<Error> = None;
-
-    for (idx, spawned) in children.iter_mut().enumerate() {
-        let style = formatter::color_for_index(idx);
-        let tag = formatter::make_tag(&spawned.name, pad_width, style);
-        send_log(log_tx, format!("{tag} killing"))?;
-
-        if let Err(source) = spawned.child.start_kill()
-            && first_error.is_none()
-        {
-            first_error = Some(Error::Kill {
-                name: spawned.name.clone(),
-                source,
-            });
-        }
+    for name in names {
+        emit(log_tx, fmt_ctx, &formatter::Event::Killing { name })?;
     }
-
-    children.clear();
-
-    match first_error {
-        Some(err) => Err(err),
-        None => Ok(()),
-    }
+    Ok(())
 }
 
-fn resolve_start_order(config: &Config) -> Vec<usize> {
-    let mut order = Vec::new();
+fn resolve_start_order(config: &Config) -> Vec<String> {
+    let mut order: Vec<String> = Vec::new();
     let mut resolved: HashSet<&str> = HashSet::new();
-    let mut remaining: Vec<usize> = (0..config.process.len()).collect();
+    let mut remaining: Vec<&str> = config
+        .process
+        .iter()
+        .map(|proc| proc.name.as_str())
+        .collect();
 
     while !remaining.is_empty() {
         let mut progress = false;
 
-        remaining.retain(|&idx| {
-            let Some(proc_def) = config.process.get(idx) else {
+        remaining.retain(|&name| {
+            let Some(proc_def) = config.process.iter().find(|proc| proc.name == name) else {
                 return false;
             };
             let all_deps_resolved = proc_def
@@ -226,8 +267,8 @@ fn resolve_start_order(config: &Config) -> Vec<usize> {
                 .all(|dep| resolved.contains(dep.as_str()));
 
             if all_deps_resolved {
-                order.push(idx);
-                resolved.insert(&proc_def.name);
+                order.push(name.to_string());
+                resolved.insert(name);
                 progress = true;
                 false
             } else {
@@ -243,85 +284,11 @@ fn resolve_start_order(config: &Config) -> Vec<usize> {
     order
 }
 
-fn send_log(log_tx: &mpsc::UnboundedSender<String>, msg: String) -> Result<(), Error> {
-    log_tx.send(msg).map_err(Error::LogChannelClosed)
-}
-
-fn spawn_signal_listener(flag: Arc<AtomicBool>) -> Result<(), Error> {
-    let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
-        .map_err(|source| Error::SignalHandler { source })?;
-
-    let flag_term = Arc::<AtomicBool>::clone(&flag);
-
-    tokio::spawn(async move {
-        sigterm.recv().await;
-        flag_term.store(true, Ordering::SeqCst);
-    });
-
-    tokio::spawn(async move {
-        let result = signal::ctrl_c().await;
-        flag.store(true, Ordering::SeqCst);
-        result
-    });
-
-    Ok(())
-}
-
-async fn wait_for_completion(
-    children: &mut Vec<process::SpawnedProcess>,
-    config: &Config,
-    mode: Command,
-    pad_width: usize,
+fn emit(
     log_tx: &mpsc::UnboundedSender<String>,
-) -> Result<u8, Error> {
-    let main_index = match mode {
-        Command::Run => Some(config.process.len() - 1_usize),
-        Command::Up => None,
-    };
-
-    let signal_received = Arc::new(AtomicBool::new(false));
-
-    spawn_signal_listener(Arc::<AtomicBool>::clone(&signal_received))?;
-
-    let event = wait_for_event(children, &signal_received).await?;
-
-    match event {
-        Event::ProcessExited { name, status } => handle_process_exit(
-            children, config, &name, status, main_index, pad_width, log_tx,
-        ),
-        Event::Signal => {
-            kill_all(children, pad_width, log_tx)?;
-            Ok(130_u8)
-        }
-    }
-}
-
-async fn wait_for_event(
-    children: &mut Vec<process::SpawnedProcess>,
-    signal_flag: &AtomicBool,
-) -> Result<Event, Error> {
-    loop {
-        for spawned in children.iter_mut() {
-            match spawned.child.try_wait() {
-                Ok(Some(status)) => {
-                    let name = spawned.name.clone();
-                    children.retain(|ch| ch.name != name);
-                    return Ok(Event::ProcessExited { name, status });
-                }
-                Ok(None) => {}
-                Err(source) => {
-                    return Err(Error::ProcessWait {
-                        name: spawned.name.clone(),
-                        source,
-                    });
-                }
-            }
-        }
-
-        if signal_flag.load(Ordering::SeqCst) {
-            return Ok(Event::Signal);
-        }
-
-        tokio::time::sleep(std::time::Duration::from_millis(50_u64)).await;
-    }
+    fmt_ctx: &formatter::Context,
+    event: &formatter::Event<'_>,
+) -> Result<(), Error> {
+    let msg = formatter::render(fmt_ctx, event)?;
+    log_tx.send(msg).map_err(Error::LogChannelClosed)
 }

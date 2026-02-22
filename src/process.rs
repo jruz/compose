@@ -20,18 +20,13 @@ pub enum Error {
     },
 }
 
-pub struct SpawnedProcess {
-    pub child: tokio::process::Child,
-    pub name: String,
-}
-
 pub fn spawn(
     name: &str,
     command: &str,
     pad_width: usize,
     style: Style,
     log_tx: mpsc::UnboundedSender<String>,
-) -> Result<SpawnedProcess, Error> {
+) -> Result<tokio::process::Child, Error> {
     let mut child = Command::new("sh")
         .arg("-c")
         .arg(command)
@@ -46,22 +41,18 @@ pub fn spawn(
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    let name_owned = name.to_string();
 
     if let Some(stdout) = stdout {
-        let tag = formatter::make_tag(&name_owned, pad_width, style);
+        let tag = formatter::make_tag(name, pad_width, style);
         tokio::spawn(stream_lines(tag, BufReader::new(stdout), log_tx.clone()));
     }
 
     if let Some(stderr) = stderr {
-        let tag = formatter::make_tag(&name_owned, pad_width, style);
+        let tag = formatter::make_tag(name, pad_width, style);
         tokio::spawn(stream_lines(tag, BufReader::new(stderr), log_tx));
     }
 
-    Ok(SpawnedProcess {
-        child,
-        name: name_owned,
-    })
+    Ok(child)
 }
 
 async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
