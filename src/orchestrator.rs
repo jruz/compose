@@ -157,10 +157,11 @@ async fn manage_lifecycle(
         .map_err(|source| Error::SignalHandler { source })?;
 
     let (exit_tx, mut exit_rx) = mpsc::unbounded_channel::<ExitEvent>();
+    let mut join_set = tokio::task::JoinSet::new();
 
     for (name, mut child) in children {
         let tx = exit_tx.clone();
-        tokio::spawn(async move {
+        join_set.spawn(async move {
             let result = child.wait().await;
             let _send = tx.send(ExitEvent { name, result });
         });
@@ -168,7 +169,7 @@ async fn manage_lifecycle(
 
     drop(exit_tx);
 
-    tokio::select! {
+    let result = tokio::select! {
         Some(event) = exit_rx.recv() => {
             let status = event.result.map_err(|source| Error::ProcessWait {
                 name: event.name.clone(),
@@ -191,7 +192,11 @@ async fn manage_lifecycle(
             emit_killing_all(all_names, fmt_ctx, log_tx)?;
             Ok(130_u8)
         }
-    }
+    };
+
+    join_set.abort_all();
+
+    result
 }
 
 fn handle_exit_result(
