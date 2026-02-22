@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod formatter;
 mod health;
 mod orchestrator;
 mod process;

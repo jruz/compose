@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 
 use crate::cli::Command;
 use crate::config::Config;
+use crate::formatter;
 use crate::health;
 use crate::process;
 
@@ -74,12 +75,12 @@ pub async fn run(
     mode: Command,
     log_tx: mpsc::UnboundedSender<String>,
 ) -> Result<u8, Error> {
-    let pad_width = config
+    let names: Vec<String> = config
         .process
         .iter()
-        .map(|proc| proc.name.len())
-        .max()
-        .ok_or(Error::NoProcesses)?;
+        .map(|proc| proc.name.clone())
+        .collect();
+    let pad_width = formatter::pad_width(&names).ok_or(Error::NoProcesses)?;
 
     let mut children: Vec<process::SpawnedProcess> = Vec::new();
     let mut healthy_set: HashSet<String> = HashSet::new();
@@ -91,8 +92,8 @@ pub async fn run(
             .process
             .get(*idx)
             .ok_or(Error::ProcessIndexOutOfBounds { index: *idx })?;
-        let style = process::color_for_index(*idx);
-        let tag = process::make_tag(&proc_def.name, pad_width, style);
+        let style = formatter::color_for_index(*idx);
+        let tag = formatter::make_tag(&proc_def.name, pad_width, style);
 
         for dep in &proc_def.depends_on {
             if !healthy_set.contains(dep) {
@@ -162,8 +163,8 @@ fn handle_process_exit(
             name: name.to_string(),
         })?;
 
-    let style = process::color_for_index(exited_index);
-    let tag = process::make_tag(name, pad_width, style);
+    let style = formatter::color_for_index(exited_index);
+    let tag = formatter::make_tag(name, pad_width, style);
     let code = exit_code_from_status(name, status)?;
 
     if Some(exited_index) == main_index {
@@ -185,8 +186,8 @@ fn kill_all(
     let mut first_error: Option<Error> = None;
 
     for (idx, spawned) in children.iter_mut().enumerate() {
-        let style = process::color_for_index(idx);
-        let tag = process::make_tag(&spawned.name, pad_width, style);
+        let style = formatter::color_for_index(idx);
+        let tag = formatter::make_tag(&spawned.name, pad_width, style);
         send_log(log_tx, format!("{tag} killing"))?;
 
         if let Err(source) = spawned.child.start_kill()
