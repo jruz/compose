@@ -1,0 +1,9 @@
+[[process]]
+name = "crasher"
+command = "echo >&2 'ERROR: something went wrong' && echo >&2 'FATAL: cannot continue' && exit 1"
+depends_on = []
+
+[[process]]
+name = "main"
+command = "exec sleep 10"
+depends_on = []
