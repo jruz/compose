@@ -1,16 +1,9 @@
-use owo_colors::{OwoColorize as _, Style};
+use owo_colors::Style;
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-const COLORS: &[fn() -> Style] = &[
-    || Style::new().cyan(),
-    || Style::new().green(),
-    || Style::new().yellow(),
-    || Style::new().magenta(),
-    || Style::new().blue(),
-    || Style::new().red(),
-];
+use crate::formatter;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -30,22 +23,6 @@ pub enum Error {
 pub struct SpawnedProcess {
     pub child: tokio::process::Child,
     pub name: String,
-}
-
-pub fn color_for_index(index: usize) -> Style {
-    let wrapped = index.checked_rem(COLORS.len());
-    match wrapped {
-        Some(pos) => match COLORS.get(pos) {
-            Some(color_fn) => color_fn(),
-            None => Style::new(),
-        },
-        None => Style::new(),
-    }
-}
-
-pub fn make_tag(name: &str, pad_width: usize, style: Style) -> String {
-    let padded = format!("{name:pad_width$}");
-    format!("[{}]", padded.style(style))
 }
 
 pub fn spawn(
@@ -72,12 +49,12 @@ pub fn spawn(
     let name_owned = name.to_string();
 
     if let Some(stdout) = stdout {
-        let tag = make_tag(&name_owned, pad_width, style);
+        let tag = formatter::make_tag(&name_owned, pad_width, style);
         tokio::spawn(stream_lines(tag, BufReader::new(stdout), log_tx.clone()));
     }
 
     if let Some(stderr) = stderr {
-        let tag = make_tag(&name_owned, pad_width, style);
+        let tag = formatter::make_tag(&name_owned, pad_width, style);
         tokio::spawn(stream_lines(tag, BufReader::new(stderr), log_tx));
     }
 
