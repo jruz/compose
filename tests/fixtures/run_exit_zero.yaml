@@ -1,0 +1,8 @@
+process:
+  - name: support
+    command: "exec sleep 10"
+    depends_on: []
+
+  - name: main
+    command: "echo hello && exit 0"
+    depends_on: []

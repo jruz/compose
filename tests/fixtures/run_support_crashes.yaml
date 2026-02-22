@@ -1,0 +1,8 @@
+process:
+  - name: crasher
+    command: "exit 1"
+    depends_on: []
+
+  - name: main
+    command: "exec sleep 10"
+    depends_on: []

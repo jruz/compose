@@ -1,9 +1,0 @@
-[[process]]
-name = "app"
-command = "echo first"
-depends_on = []
-
-[[process]]
-name = "app"
-command = "echo second"
-depends_on = []

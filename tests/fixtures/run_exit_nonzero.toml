@@ -1,9 +1,0 @@
-[[process]]
-name = "support"
-command = "exec sleep 10"
-depends_on = []
-
-[[process]]
-name = "main"
-command = "exit 42"
-depends_on = []
