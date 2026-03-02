@@ -1,0 +1,5 @@
+processes:
+  echo-cmd:
+    docker:
+      build: .
+    command: "hello from command"

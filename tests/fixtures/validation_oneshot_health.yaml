@@ -1,0 +1,12 @@
+processes:
+  init:
+    type: oneshot
+    command: "echo done"
+    health:
+      command: "true"
+      interval_secs: 1
+      timeout_secs: 5
+
+  main:
+    command: "exit 0"
+    depends_on: [init]

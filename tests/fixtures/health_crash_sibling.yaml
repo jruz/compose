@@ -1,0 +1,10 @@
+processes:
+  a-worker:
+    command: "sleep 60"
+
+  b-db:
+    command: "sleep 60"
+    health:
+      command: "false"
+      interval_secs: 1
+      timeout_secs: 3

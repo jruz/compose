@@ -1,0 +1,10 @@
+processes:
+  db:
+    command: "echo db-started && exec sleep 10"
+
+  cache:
+    command: "echo cache-started && exec sleep 10"
+
+  app:
+    command: "echo app-started && exit 0"
+    depends_on: [db, cache]

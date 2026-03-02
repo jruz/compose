@@ -6,8 +6,14 @@ use serde::Deserialize;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("circular dependency detected involving: {0}")]
+    #[error("circular dependency detected: {0}")]
     CircularDependency(String),
+
+    #[error("{name}: docker process cannot have both command and exec")]
+    DockerBothCommandAndExec { name: String },
+
+    #[error("{name}: docker requires image or build")]
+    DockerNoImageOrBuild { name: String },
 
     #[error("malformed env file {path} at line {line_number}: {line}")]
     EnvFileMalformed {
@@ -16,14 +22,26 @@ pub enum Error {
         line: String,
     },
 
-    #[error("failed to read {path}: {source}")]
+    #[error("{name}: exec driver requires command")]
+    ExecNoCommand { name: String },
+
+    #[error("ERROR: failed to read {path}: {source}")]
     FileRead {
         path: PathBuf,
         source: std::io::Error,
     },
 
+    #[error("{name}: health check must specify either command or exec, not both")]
+    HealthBoth { name: String },
+
+    #[error("{name}: health check must specify command or exec")]
+    HealthEmpty { name: String },
+
     #[error("no processes defined")]
     NoProcesses,
+
+    #[error("{name}: oneshot processes cannot have health checks")]
+    OneshotHealth { name: String },
 
     #[error("process {process} depends on unknown process: {dependency}")]
     UnknownDependency { dependency: String, process: String },
@@ -38,24 +56,53 @@ pub enum Error {
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub processes: IndexMap<String, ProcessDef>,
+    pub shell: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DockerConfig {
+    pub build: Option<String>,
+    pub dockerfile: Option<String>,
+    pub image: Option<String>,
+    #[serde(default)]
+    pub ports: Vec<String>,
+    pub stop_timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub volumes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct HealthCheck {
-    pub command: String,
+    pub command: Option<String>,
+    pub exec: Option<Vec<String>>,
     pub interval_secs: u64,
     pub timeout_secs: u64,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ProcessDef {
-    pub command: String,
+    pub command: Option<String>,
     #[serde(default)]
     pub depends_on: Vec<String>,
+    pub docker: Option<DockerConfig>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
     pub env_file: Option<String>,
+    pub exec: Option<Vec<String>>,
     pub health: Option<HealthCheck>,
+    #[serde(rename = "type", default = "default_process_type")]
+    pub process_type: ProcessType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProcessType {
+    Oneshot,
+    Service,
+}
+
+fn default_process_type() -> ProcessType {
+    ProcessType::Service
 }
 
 pub fn load(path: &Path) -> Result<Config, Error> {
@@ -105,24 +152,14 @@ fn validate(config: &Config) -> Result<(), Error> {
         return Err(Error::NoProcesses);
     }
 
+    for (name, proc_def) in &config.processes {
+        check_driver(name, proc_def)?;
+        check_health(name, proc_def)?;
+    }
+
     check_unknown_dependencies(config)?;
     check_circular_dependencies(config)?;
 
-    Ok(())
-}
-
-fn check_unknown_dependencies(config: &Config) -> Result<(), Error> {
-    let names: HashSet<&str> = config.processes.keys().map(String::as_str).collect();
-    for (name, proc_def) in &config.processes {
-        for dep in &proc_def.depends_on {
-            if !names.contains(dep.as_str()) {
-                return Err(Error::UnknownDependency {
-                    process: name.clone(),
-                    dependency: dep.clone(),
-                });
-            }
-        }
-    }
     Ok(())
 }
 
@@ -140,13 +177,73 @@ fn check_circular_dependencies(config: &Config) -> Result<(), Error> {
 
     let mut visited = HashSet::new();
     let mut in_stack = HashSet::new();
+    let mut path: Vec<&str> = Vec::new();
 
     for name in config.processes.keys() {
         if !visited.contains(name.as_str()) {
-            detect_cycle(name.as_str(), &adj, &mut visited, &mut in_stack)?;
+            detect_cycle(name.as_str(), &adj, &mut visited, &mut in_stack, &mut path)?;
         }
     }
 
+    Ok(())
+}
+
+fn check_driver(name: &str, proc_def: &ProcessDef) -> Result<(), Error> {
+    match &proc_def.docker {
+        Some(docker) if docker.image.is_none() && docker.build.is_none() => {
+            Err(Error::DockerNoImageOrBuild {
+                name: name.to_string(),
+            })
+        }
+        Some(_) if proc_def.command.is_some() && proc_def.exec.is_some() => {
+            Err(Error::DockerBothCommandAndExec {
+                name: name.to_string(),
+            })
+        }
+        None if proc_def.command.is_none() => Err(Error::ExecNoCommand {
+            name: name.to_string(),
+        }),
+        Some(_) | None => Ok(()),
+    }
+}
+
+fn check_health(name: &str, proc_def: &ProcessDef) -> Result<(), Error> {
+    match &proc_def.health {
+        None => Ok(()),
+        Some(_) if proc_def.process_type == ProcessType::Oneshot => Err(Error::OneshotHealth {
+            name: name.to_string(),
+        }),
+        Some(health) => check_health_fields(name, health),
+    }
+}
+
+fn check_health_fields(name: &str, health: &HealthCheck) -> Result<(), Error> {
+    let has_command = health.command.as_ref().is_some_and(|cmd| !cmd.is_empty());
+    let has_exec = health.exec.as_ref().is_some_and(|exec| !exec.is_empty());
+
+    match (has_command, has_exec) {
+        (false, false) => Err(Error::HealthEmpty {
+            name: name.to_string(),
+        }),
+        (true, true) => Err(Error::HealthBoth {
+            name: name.to_string(),
+        }),
+        _ => Ok(()),
+    }
+}
+
+fn check_unknown_dependencies(config: &Config) -> Result<(), Error> {
+    let names: HashSet<&str> = config.processes.keys().map(String::as_str).collect();
+    for (name, proc_def) in &config.processes {
+        for dep in &proc_def.depends_on {
+            if !names.contains(dep.as_str()) {
+                return Err(Error::UnknownDependency {
+                    process: name.clone(),
+                    dependency: dep.clone(),
+                });
+            }
+        }
+    }
     Ok(())
 }
 
@@ -155,21 +252,37 @@ fn detect_cycle<'graph>(
     adj: &HashMap<&'graph str, Vec<&'graph str>>,
     visited: &mut HashSet<&'graph str>,
     in_stack: &mut HashSet<&'graph str>,
+    path: &mut Vec<&'graph str>,
 ) -> Result<(), Error> {
     visited.insert(node);
     in_stack.insert(node);
+    path.push(node);
 
     if let Some(deps) = adj.get(node) {
         for dep in deps {
             if in_stack.contains(dep) {
-                return Err(Error::CircularDependency(node.to_string()));
+                let cycle = format_cycle(path, dep);
+                return Err(Error::CircularDependency(cycle));
             }
             if !visited.contains(dep) {
-                detect_cycle(dep, adj, visited, in_stack)?;
+                detect_cycle(dep, adj, visited, in_stack, path)?;
             }
         }
     }
 
     in_stack.remove(node);
+    path.pop();
     Ok(())
+}
+
+fn format_cycle(path: &[&str], back_edge: &str) -> String {
+    let cycle_start = path.iter().position(|&nm| nm == back_edge);
+    match cycle_start.and_then(|idx| path.get(idx..)) {
+        Some(cycle_slice) => {
+            let mut chain: Vec<&str> = cycle_slice.to_vec();
+            chain.push(back_edge);
+            chain.join(" -> ")
+        }
+        None => format!("{} -> {back_edge}", path.last().map_or("?", |nm| nm)),
+    }
 }

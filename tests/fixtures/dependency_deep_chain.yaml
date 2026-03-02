@@ -1,0 +1,11 @@
+processes:
+  a:
+    command: "echo a-started && exit 0"
+    depends_on: [b]
+
+  b:
+    command: "echo b-started && exec sleep 10"
+    depends_on: [c]
+
+  c:
+    command: "echo c-started && exec sleep 10"

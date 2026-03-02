@@ -1,0 +1,4 @@
+processes:
+  main:
+    type: invalid
+    command: "exit 0"

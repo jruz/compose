@@ -1,0 +1,8 @@
+processes:
+  init:
+    type: oneshot
+    command: "exit 1"
+
+  main:
+    command: "echo should-not-run && exit 0"
+    depends_on: [init]

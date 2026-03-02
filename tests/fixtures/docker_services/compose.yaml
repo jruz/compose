@@ -1,0 +1,13 @@
+processes:
+  svc-server:
+    docker:
+      build: ./server
+    health:
+      command: "true"
+      interval_secs: 1
+      timeout_secs: 10
+
+  svc-client:
+    docker:
+      build: ./client
+    depends_on: [svc-server]

@@ -1,0 +1,18 @@
+processes:
+  base:
+    type: oneshot
+    command: "echo base-done"
+
+  left:
+    type: oneshot
+    command: "echo left-done"
+    depends_on: [base]
+
+  right:
+    type: oneshot
+    command: "echo right-done"
+    depends_on: [base]
+
+  main:
+    command: "echo main-started && exit 0"
+    depends_on: [left, right]

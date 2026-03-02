@@ -1,25 +1,13 @@
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
 
-use owo_colors::Style;
-use tokio::io::{AsyncBufReadExt as _, BufReader};
-use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use crate::formatter;
-
-const STDERR_BUFFER_LINES: usize = 20;
-
-pub type StderrBuffer = Arc<Mutex<Vec<String>>>;
+use crate::actor;
+use crate::config;
+use crate::message;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("log channel closed: {0}")]
-    LogChannelClosed(mpsc::error::SendError<String>),
-
-    #[error("pipe read failed: {0}")]
-    PipeRead(std::io::Error),
-
     #[error("failed to spawn process {name}: {source}")]
     Spawn {
         name: String,
@@ -27,14 +15,16 @@ pub enum Error {
     },
 }
 
-pub fn spawn(
+pub fn spawn_actor(
     name: &str,
     command: &str,
+    shell: &str,
     env: &BTreeMap<String, String>,
-    style: Style,
-    log_tx: mpsc::UnboundedSender<String>,
-) -> Result<(tokio::process::Child, StderrBuffer), Error> {
-    let mut cmd = Command::new("sh");
+    health: Option<&config::HealthCheck>,
+    event_tx: mpsc::UnboundedSender<message::Event>,
+    display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
+) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
+    let mut cmd = tokio::process::Command::new(shell);
     cmd.arg("-c")
         .arg(command)
         .stdout(std::process::Stdio::piped())
@@ -45,63 +35,31 @@ pub fn spawn(
         cmd.env(key, value);
     }
 
-    let mut child = cmd.spawn().map_err(|source| Error::Spawn {
+    let mut child = spawn_child(&mut cmd).map_err(|source| Error::Spawn {
         name: name.to_string(),
         source,
     })?;
 
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-    let stderr_buffer: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let drain = actor::setup_output_drain(name, &mut child, display_tx);
+    let health_config = health.map(actor::parse_health_config);
+    let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-    if let Some(stdout) = stdout {
-        let tag = formatter::make_tag(name, style);
-        tokio::spawn(stream_lines(
-            tag,
-            BufReader::new(stdout),
-            log_tx.clone(),
-            None,
-        ));
-    }
+    let actor_name = name.to_string();
+    tokio::spawn(actor::actor_loop(
+        actor::Backend::Exec,
+        actor_name,
+        child,
+        cmd_rx,
+        event_tx,
+        health_config,
+        drain,
+    ));
 
-    if let Some(stderr) = stderr {
-        let tag = formatter::make_tag(name, style);
-        tokio::spawn(stream_lines(
-            tag,
-            BufReader::new(stderr),
-            log_tx,
-            Some(Arc::clone(&stderr_buffer)),
-        ));
-    }
-
-    Ok((child, stderr_buffer))
+    Ok(cmd_tx)
 }
 
-async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
-    tag: String,
-    reader: BufReader<R>,
-    log_tx: mpsc::UnboundedSender<String>,
-    capture: Option<Arc<Mutex<Vec<String>>>>,
-) -> Result<(), Error> {
-    let mut lines = reader.lines();
-    loop {
-        match lines.next_line().await {
-            Ok(Some(line)) => {
-                if let Some(buf) = &capture
-                    && let Ok(mut buf) = buf.lock()
-                {
-                    buf.push(line.clone());
-                    if buf.len() > STDERR_BUFFER_LINES {
-                        buf.remove(0);
-                    }
-                }
-                log_tx
-                    .send(format!("{tag} {line}"))
-                    .map_err(Error::LogChannelClosed)?;
-            }
-            Ok(None) => break,
-            Err(pipe_err) => return Err(Error::PipeRead(pipe_err)),
-        }
-    }
-    Ok(())
+pub fn spawn_child(
+    cmd: &mut tokio::process::Command,
+) -> Result<tokio::process::Child, std::io::Error> {
+    cmd.spawn()
 }
