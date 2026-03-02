@@ -1,0 +1,30 @@
+processes:
+  postgres:
+    docker:
+      image: postgres:16-alpine
+      ports:
+        - "5432:5432"
+    env:
+      POSTGRES_PASSWORD: devpass
+      POSTGRES_DB: app
+    health:
+      command: "pg_isready -U postgres"
+      interval_secs: 1
+      timeout_secs: 10
+
+  redis:
+    docker:
+      image: redis:7-alpine
+      ports:
+        - "6379:6379"
+    health:
+      command: "redis-cli ping"
+      interval_secs: 1
+      timeout_secs: 5
+
+  api:
+    docker:
+      image: nginx:alpine
+      ports:
+        - "8080:80"
+    depends_on: [postgres, redis]

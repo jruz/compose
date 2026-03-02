@@ -1,0 +1,6 @@
+processes:
+  main:
+    command: "echo test"
+    env:
+      A: "${B}"
+      B: "${A}"

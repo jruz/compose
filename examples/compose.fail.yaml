@@ -1,0 +1,15 @@
+processes:
+  redis:
+    command: bun run examples/services/redis.ts
+    health:
+      command: "curl -sf http://localhost:6555/health"
+      interval_secs: 1
+      timeout_secs: 5
+
+  api:
+    command: bun run examples/services/api.ts
+    depends_on: [redis]
+
+  crasher:
+    command: bun run examples/services/crasher.ts
+    depends_on: [redis]

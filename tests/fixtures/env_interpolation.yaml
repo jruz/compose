@@ -1,0 +1,10 @@
+processes:
+  main:
+    command: "echo $DATABASE_URL && exit 0"
+    env:
+      DB_USER: admin
+      DB_PASS: secret
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: mydb
+      DATABASE_URL: "postgres://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"

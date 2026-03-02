@@ -1,0 +1,7 @@
+processes:
+  support:
+    type: service
+    command: "exec sleep 10"
+
+  main:
+    command: "echo main-done && exit 0"

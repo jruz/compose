@@ -1,0 +1,8 @@
+processes:
+  crash-worker:
+    docker:
+      build: ./crasher
+
+  crash-main:
+    docker:
+      build: ./main

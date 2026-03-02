@@ -1,0 +1,7 @@
+processes:
+  trapper:
+    command: "trap 'echo sigterm-received; exit 0' TERM; echo trapper-started; while true; do sleep 0.1; done"
+
+  stopper:
+    command: "sleep 0.5 && exit 0"
+    depends_on: [trapper]

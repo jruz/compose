@@ -1,0 +1,7 @@
+processes:
+  service:
+    command: "trap 'echo sigterm-on-timeout; exit 1' TERM; echo service-started; while true; do sleep 0.1; done"
+    health:
+      command: "false"
+      interval_secs: 1
+      timeout_secs: 2

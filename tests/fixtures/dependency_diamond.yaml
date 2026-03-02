@@ -1,0 +1,15 @@
+processes:
+  infra:
+    command: "echo infra-started && exec sleep 10"
+
+  svcA:
+    command: "echo svcA-started && exec sleep 10"
+    depends_on: [infra]
+
+  svcB:
+    command: "echo svcB-started && exec sleep 10"
+    depends_on: [infra]
+
+  app:
+    command: "echo app-started && exit 0"
+    depends_on: [svcA, svcB]

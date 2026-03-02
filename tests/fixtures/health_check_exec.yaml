@@ -1,0 +1,11 @@
+processes:
+  service:
+    command: "echo service-ready && exec sleep 10"
+    health:
+      exec: ["true"]
+      interval_secs: 1
+      timeout_secs: 5
+
+  consumer:
+    command: "echo consumer-started && exit 0"
+    depends_on: [service]

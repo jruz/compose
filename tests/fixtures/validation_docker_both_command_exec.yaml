@@ -1,0 +1,6 @@
+processes:
+  broken:
+    docker:
+      image: alpine:3.21
+    command: "echo hi"
+    exec: ["echo", "hi"]

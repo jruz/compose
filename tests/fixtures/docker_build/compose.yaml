@@ -1,0 +1,8 @@
+processes:
+  build-bg:
+    docker:
+      build: ./worker
+
+  build-main:
+    docker:
+      build: ./app

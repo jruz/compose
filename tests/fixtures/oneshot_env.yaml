@@ -1,0 +1,10 @@
+processes:
+  init:
+    type: oneshot
+    command: "echo HELLO=$HELLO"
+    env:
+      HELLO: "world"
+
+  main:
+    command: "exit 0"
+    depends_on: [init]

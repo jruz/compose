@@ -1,0 +1,6 @@
+[test-groups.docker]
+max-threads = 1
+
+[[profile.default.overrides]]
+filter = "test(docker)"
+test-group = "docker"

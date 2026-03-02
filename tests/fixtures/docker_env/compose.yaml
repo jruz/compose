@@ -1,0 +1,11 @@
+processes:
+  env-bg:
+    docker:
+      build: ./bg
+
+  env-main:
+    docker:
+      build: ./main
+    env:
+      MY_VAR: "hello-from-env"
+      OTHER_VAR: "42"

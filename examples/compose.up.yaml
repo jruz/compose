@@ -1,0 +1,26 @@
+processes:
+  postgres:
+    command: bun run examples/services/postgres.ts
+    health:
+      command: "curl -sf http://localhost:5555/health"
+      interval_secs: 1
+      timeout_secs: 5
+
+  redis:
+    command: bun run examples/services/redis.ts
+    health:
+      command: "curl -sf http://localhost:6555/health"
+      interval_secs: 1
+      timeout_secs: 5
+
+  worker:
+    command: bun run examples/services/worker.ts
+    depends_on: [postgres, redis]
+
+  api:
+    command: bun run examples/services/api.ts
+    depends_on: [postgres, redis]
+    health:
+      command: "curl -sf http://localhost:8555/health"
+      interval_secs: 1
+      timeout_secs: 5

@@ -1,0 +1,12 @@
+processes:
+  svc:
+    command: "exec sleep 10"
+    health:
+      command: "true"
+      exec: ["true"]
+      interval_secs: 1
+      timeout_secs: 5
+
+  consumer:
+    command: "echo done"
+    depends_on: [svc]

@@ -1,0 +1,13 @@
+processes:
+  hc-service:
+    docker:
+      build: ./service
+    health:
+      exec: ["cat", "/tmp/healthy"]
+      interval_secs: 1
+      timeout_secs: 10
+
+  hc-consumer:
+    docker:
+      build: ./consumer
+    depends_on: [hc-service]

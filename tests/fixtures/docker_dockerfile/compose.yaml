@@ -1,0 +1,5 @@
+processes:
+  custom-df:
+    docker:
+      build: .
+      dockerfile: Dockerfile.custom

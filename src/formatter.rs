@@ -1,4 +1,9 @@
+use std::io::IsTerminal as _;
+
 use owo_colors::{OwoColorize as _, Style};
+use tokio::sync::mpsc;
+
+use crate::message;
 
 const COLORS: &[fn() -> Style] = &[
     || Style::new().cyan(),
@@ -9,85 +14,105 @@ const COLORS: &[fn() -> Style] = &[
     || Style::new().red(),
 ];
 
-pub struct Context {
-    styles: Vec<(String, Style)>,
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("no processes defined")]
+    NoProcesses,
+
     #[error("unknown process name in formatter: {0}")]
     UnknownProcess(String),
 }
 
-#[derive(Clone)]
-pub enum Event<'ev> {
-    Crashed {
-        name: &'ev str,
-        code: u8,
-    },
-    Exited {
-        name: &'ev str,
-        code: u8,
-    },
-    Healthy {
-        name: &'ev str,
-    },
-    Killing {
-        name: &'ev str,
-        reason: &'ev str,
-    },
-    Starting {
-        name: &'ev str,
-        command: &'ev str,
-    },
-    Summary {
-        name: &'ev str,
-        stderr_lines: &'ev [String],
-    },
-    WaitingHealth {
-        name: &'ev str,
-    },
-}
-
-pub fn build_context(names: &[String]) -> Option<Context> {
+pub fn spawn_task(
+    names: &[String],
+    mut display_rx: mpsc::UnboundedReceiver<message::DisplayMsg>,
+    log_tx: mpsc::UnboundedSender<String>,
+) -> Result<tokio::task::JoinHandle<()>, Error> {
     if names.is_empty() {
-        return None;
+        return Err(Error::NoProcesses);
     }
-    let styles = names
+
+    let use_color = std::io::stdout().is_terminal();
+    let styles: Vec<(String, Style)> = names
         .iter()
         .enumerate()
-        .map(|(idx, name)| (name.clone(), color_for_index(idx)))
+        .map(|(idx, name)| {
+            let style = if use_color {
+                color_for_index(idx)
+            } else {
+                Style::new()
+            };
+            (name.clone(), style)
+        })
         .collect();
-    Some(Context { styles })
+
+    let handle = tokio::spawn(async move {
+        while let Some(msg) = display_rx.recv().await {
+            match render(&styles, &msg) {
+                Ok(rendered) => {
+                    if let Err(_send_err) = log_tx.send(rendered) {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    if let Err(_send_err) = log_tx.send(format!("[formatter] {err}")) {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(handle)
 }
 
-pub fn lookup_style(ctx: &Context, name: &str) -> Result<Style, Error> {
-    ctx.styles
+fn render(styles: &[(String, Style)], msg: &message::DisplayMsg) -> Result<String, Error> {
+    let name = message::display_msg_name(msg);
+    let style = lookup_style(styles, name)?;
+    let tag = make_tag(name, style);
+
+    let line = match msg {
+        message::DisplayMsg::Building { .. } => format!("{tag} building"),
+        message::DisplayMsg::Built { .. } => format!("{tag} built"),
+        message::DisplayMsg::CleanupError { reason, .. } => {
+            format!("{tag} cleanup error: {reason}")
+        }
+        message::DisplayMsg::Completed { .. } => format!("{tag} completed"),
+        message::DisplayMsg::Crashed { code, .. } => {
+            format!("{tag} crashed with code {code}")
+        }
+        message::DisplayMsg::CreatingNetwork { .. } => format!("{tag} creating network"),
+        message::DisplayMsg::Exited { code, .. } => format!("{tag} exited with code {code}"),
+        message::DisplayMsg::HealthFailed { reason, .. } => {
+            format!("{tag} {reason}")
+        }
+        message::DisplayMsg::Healthy { .. } => format!("{tag} healthy"),
+        message::DisplayMsg::Killing { reason, .. } => format!("{tag} killing ({reason})"),
+        message::DisplayMsg::Output { line, .. } => format!("{tag} {line}"),
+        message::DisplayMsg::RemovingContainers { .. } => format!("{tag} removing containers"),
+        message::DisplayMsg::RemovingNetwork { .. } => format!("{tag} removing network"),
+        message::DisplayMsg::Starting { command, .. } => format!("{tag} starting: {command}"),
+        message::DisplayMsg::Summary { stderr_lines, .. } => render_summary(&tag, stderr_lines),
+        message::DisplayMsg::WaitingCompletion { .. } => {
+            format!("{tag} waiting for completion")
+        }
+        message::DisplayMsg::WaitingHealth { .. } => {
+            format!("{tag} waiting for health check...")
+        }
+    };
+    Ok(line)
+}
+
+fn lookup_style(styles: &[(String, Style)], name: &str) -> Result<Style, Error> {
+    styles
         .iter()
         .find(|(nm, _style)| nm == name)
         .map(|(_nm, style)| *style)
         .ok_or_else(|| Error::UnknownProcess(name.to_string()))
 }
 
-pub fn make_tag(name: &str, style: Style) -> String {
+fn make_tag(name: &str, style: Style) -> String {
     format!("[{}]", name.style(style))
-}
-
-pub fn render(ctx: &Context, event: &Event<'_>) -> Result<String, Error> {
-    let name = event_name(event);
-    let style = lookup_style(ctx, name)?;
-    let tag = make_tag(name, style);
-
-    let line = match event {
-        Event::Crashed { code, .. } => format!("{tag} crashed with code {code}"),
-        Event::Exited { code, .. } => format!("{tag} exited with code {code}"),
-        Event::Healthy { .. } => format!("{tag} healthy"),
-        Event::Killing { reason, .. } => format!("{tag} killing ({reason})"),
-        Event::Starting { command, .. } => format!("{tag} starting: {command}"),
-        Event::Summary { stderr_lines, .. } => render_summary(&tag, stderr_lines),
-        Event::WaitingHealth { .. } => format!("{tag} waiting for health check..."),
-    };
-    Ok(line)
 }
 
 fn color_for_index(index: usize) -> Style {
@@ -101,16 +126,32 @@ fn color_for_index(index: usize) -> Style {
     }
 }
 
-fn event_name<'ev>(event: &Event<'ev>) -> &'ev str {
-    match event {
-        Event::Crashed { name, .. }
-        | Event::Exited { name, .. }
-        | Event::Healthy { name }
-        | Event::Killing { name, .. }
-        | Event::Starting { name, .. }
-        | Event::Summary { name, .. }
-        | Event::WaitingHealth { name } => name,
+pub fn render_error_msg(msg: &str) -> String {
+    let use_color = std::io::stdout().is_terminal();
+    if use_color {
+        let style = Style::new().red();
+        format!("[{}] {}", "ERROR".style(style), msg.style(style))
+    } else {
+        format!("[ERROR] {msg}")
     }
+}
+
+pub fn render_ok() -> String {
+    let use_color = std::io::stdout().is_terminal();
+    if use_color {
+        let style = Style::new().green();
+        format!(
+            "[{}] {}",
+            "OK".style(style),
+            "all processes completed successfully".style(style)
+        )
+    } else {
+        "[OK] all processes completed successfully".to_string()
+    }
+}
+
+pub fn render_error(name: &str) -> String {
+    render_error_msg(&format!("{name} failed"))
 }
 
 fn render_summary(tag: &str, stderr_lines: &[String]) -> String {

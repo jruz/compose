@@ -1,0 +1,5 @@
+processes:
+  echo-exec:
+    docker:
+      build: .
+    exec: ["echo", "hello from exec"]

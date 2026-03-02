@@ -1,0 +1,4 @@
+shell: bash
+processes:
+  main:
+    command: "echo ${BASH_VERSION:0:1} && exit 0"

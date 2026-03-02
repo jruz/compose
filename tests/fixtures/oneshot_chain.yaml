@@ -1,0 +1,13 @@
+processes:
+  reset:
+    type: oneshot
+    command: "echo reset-done"
+
+  seed:
+    type: oneshot
+    command: "echo seed-done"
+    depends_on: [reset]
+
+  server:
+    command: "echo server-started && exit 0"
+    depends_on: [seed]

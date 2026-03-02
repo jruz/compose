@@ -1,5 +1,5 @@
 {
-  description = "DevShell";
+  description = "compose: lightweight process orchestrator";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-25.11";
@@ -7,7 +7,7 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { nixpkgs, rust-overlay, flake-utils, ... }:
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
@@ -15,6 +15,8 @@
         rustToolchain = builtins.fromTOML (builtins.readFile ./rust-toolchain.toml);
         rustVersion = rustToolchain.toolchain.channel;
         rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+        cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+        revision = self.rev or "dirty";
         commonPackages = with pkgs; [
           cargo-edit
           cargo-nextest
@@ -32,6 +34,16 @@
             commonPackages ++ linuxPackages;
       in
       {
+        packages.default = pkgs.rustPlatform.buildRustPackage {
+          pname = cargoToml.package.name;
+          version = cargoToml.package.version;
+          src = ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+          REVISION = revision;
+          doCheck = false;
+          buildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin [ pkgs.libiconv ];
+        };
+
         devShells.default = pkgs.mkShell {
           buildInputs = platformPackages;
 

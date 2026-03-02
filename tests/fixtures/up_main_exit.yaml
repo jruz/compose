@@ -1,0 +1,6 @@
+processes:
+  support:
+    command: "exec sleep 60"
+
+  main:
+    command: "sleep 0.1 && exit 0"

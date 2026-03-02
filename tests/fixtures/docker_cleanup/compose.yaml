@@ -1,0 +1,8 @@
+processes:
+  cleanup-bg:
+    docker:
+      build: ./worker
+
+  cleanup-main:
+    docker:
+      build: ./main
