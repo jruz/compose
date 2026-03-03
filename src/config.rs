@@ -54,12 +54,14 @@ pub enum Error {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     pub processes: IndexMap<String, ProcessDef>,
     pub shell: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DockerConfig {
     pub build: Option<String>,
     pub dockerfile: Option<String>,
@@ -72,6 +74,7 @@ pub struct DockerConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HealthCheck {
     pub command: Option<String>,
     pub exec: Option<Vec<String>>,
@@ -80,6 +83,7 @@ pub struct HealthCheck {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProcessDef {
     pub command: Option<String>,
     #[serde(default)]
