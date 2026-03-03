@@ -1,0 +1,14 @@
+when:
+  - event: push
+    branch: main
+  - event: manual
+  - event: pull_request
+
+steps:
+  - name: CHECK
+    image: 127.0.0.1:5000/woodpecker-job:v0.0.15
+    environment:
+      REVISION: $${CI_COMMIT_SHA}
+    commands:
+      - . /entrypoint.sh
+      - nix develop --command just check-ci

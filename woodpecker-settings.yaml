@@ -1,0 +1,33 @@
+repo:
+  name: jruz/compose
+secrets:
+  CODEBERG_TOKEN:
+    events:
+    - tag
+    - push
+    images: null
+    value: |
+      -----BEGIN AGE ENCRYPTED FILE-----
+      YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBJUGdZS2MwdEJmOTJzZmdy
+      eEpiR1dNdzh5SiswTnlKYnUxWHNuczN0K0NNCkpRUFRpSU1FYzREYVhJaXpkaFlP
+      QjNBNVNhc2gxL1AxRGNQTEwyWlZDK1UKLT4gVjs3IjAtZ3JlYXNlCk9vNjRqSWs3
+      SUlIcUYzSFZ6ZlFrektCanlEMWhiYzNSaWMwaEYyME41OVd1Y2NpUjNtRk92ZjJ6
+      NmtKRWRIelUKaEdEKzJET2hSRlRCNGRaUERMdFNKL1V3eFZBCi0tLSBJb0V0cmlz
+      M3NEa2FOaTRUNklNZW51aXl1d3BmWERmMTBnR3VFNFJlZmcwCmwgT3fNGoOkx3rK
+      XVZpilLxxcvq5livGvOM/aMWvpLes+dIKtoCpCjIrKls9fdDW9sxdLLk8FUnp87E
+      kmUx8PDFLuvYVa6bRw==
+      -----END AGE ENCRYPTED FILE-----
+settings:
+  allow_deploy: false
+  allow_pr: true
+  cancel_previous_pipeline_events:
+  - push
+  - pull_request
+  config_extension_endpoint: ''
+  require_approval: forks
+  timeout: 60
+  trusted:
+    network: false
+    security: false
+    volumes: true
+  visibility: public
