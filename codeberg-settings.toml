@@ -1,0 +1,60 @@
+[repository]
+name = "compose"
+owner = "jruz"
+topics = ["cli", "docker", "docker-compose", "orchestrator", "process-manager", "rust"]
+
+[repository.settings]
+allow_fast_forward_only_merge = true
+allow_merge_commits = false
+allow_rebase = false
+allow_rebase_explicit = false
+allow_rebase_update = true
+allow_squash_merge = true
+archived = false
+default_allow_maintainer_edit = false
+default_branch = "main"
+default_delete_branch_after_merge = true
+default_merge_style = "squash"
+default_update_style = "rebase"
+description = "Process orchestrator for shell commands and docker containers"
+globally_editable_wiki = false
+has_actions = false
+has_issues = true
+has_packages = false
+has_projects = false
+has_pull_requests = true
+has_releases = true
+has_wiki = false
+ignore_whitespace_conflicts = false
+mirror_interval = ""
+name = "compose"
+private = false
+template = false
+website = ""
+wiki_branch = "main"
+
+[repository.settings.internal_tracker]
+allow_only_contributors_to_track_time = true
+enable_issue_dependencies = true
+enable_time_tracker = true
+
+[branch_protection.main]
+apply_to_admins = true
+enable_push = true
+enable_status_check = true
+status_check_contexts = ["ci/woodpecker/pr/check"]
+
+[labels.bugs]
+color = "d73a4a"
+
+[labels.deps]
+color = "0075ca"
+
+[labels.feat]
+color = "2da44e"
+
+[labels.refa]
+color = "a2eeef"
+
+[labels.tool]
+color = "7057ff"
