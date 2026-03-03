@@ -1,0 +1,18 @@
+processes:
+  redis:
+    docker:
+      image: redis:7-alpine
+    health:
+      command: "redis-cli ping"
+      interval_secs: 1
+      timeout_secs: 30
+
+  api:
+    docker:
+      build: examples/docker-fail/api
+    depends_on: [redis]
+
+  crasher:
+    docker:
+      build: examples/docker-fail/crasher
+    depends_on: [redis]
