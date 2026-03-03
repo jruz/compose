@@ -74,6 +74,14 @@ example-fail:
     cargo build --release
     ./target/release/compose run --config examples/compose.fail.yaml
 
+example-docker-fail:
+    cargo build --release
+    ./target/release/compose run --config examples/compose.docker-fail.yaml
+
+example-invalid-fields:
+    cargo build --release
+    ./target/release/compose run --config examples/compose.invalid-fields.yaml
+
 generate-screenshots:
     cargo build --release
     vhs examples/vhs/hero.tape

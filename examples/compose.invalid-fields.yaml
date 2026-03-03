@@ -1,0 +1,7 @@
+processes:
+  api:
+    comand: "echo hello"
+    dependz_on: [redis]
+    helth:
+      comand: "curl localhost"
+      intervl_secs: 1
