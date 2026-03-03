@@ -78,10 +78,8 @@ fn handle_event(
                     )?;
                     emit_killing_all(&remaining, &format!("{name} exited"), display_tx)?;
                     kill_all(cmd_senders);
-                    Ok(message::ExitResult {
-                        code,
-                        failed_name: None,
-                    })
+                    let failed_name = if code == 0 { None } else { Some(name) };
+                    Ok(message::ExitResult { code, failed_name })
                 }
                 ShutdownStrategy::MainProcess(_) | ShutdownStrategy::AnyExit => {
                     let reason = format!("{name} crashed");
