@@ -222,8 +222,8 @@ async fn build_images(
 fn generate_network_name(project_name: Option<&str>) -> String {
     let pid = std::process::id();
     match project_name {
-        Some(name) => format!("sc-{name}-{pid}"),
-        None => format!("sc-{pid}"),
+        Some(name) => format!("compose-{name}-{pid}"),
+        None => format!("compose-{pid}"),
     }
 }
 
