@@ -1,0 +1,27 @@
+depends_on:
+  - check
+
+when:
+  - event: push
+    branch: main
+  - event: manual
+    branch: main
+
+steps:
+  - name: AUTO_TAG
+    image: alpine/git:latest
+    environment:
+      CODEBERG_TOKEN:
+        from_secret: CODEBERG_TOKEN
+    commands:
+      - git remote set-url origin "https://token:$${CODEBERG_TOKEN}@codeberg.org/$${CI_REPO}.git"
+      - VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+      - TAG="v$VERSION"
+      - |
+        if git ls-remote --tags origin | grep -q "refs/tags/$TAG$"; then
+          echo "Tag $TAG already exists on remote, skipping"
+        else
+          echo "Creating tag $TAG"
+          git tag "$TAG"
+          git push origin "$TAG"
+        fi

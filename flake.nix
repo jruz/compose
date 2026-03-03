@@ -18,12 +18,15 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         revision = self.rev or "dirty";
         commonPackages = with pkgs; [
+          bun
           cargo-edit
           cargo-nextest
           cargo-outdated
           cargo-watch
           just
+          nushell
           rust
+          woodpecker-cli
         ];
         darwinPackages = with pkgs; [ libiconv ];
         linuxPackages = with pkgs; [ glibc glibcLocales ];

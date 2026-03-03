@@ -2,7 +2,12 @@ install:
     cargo install --path . --force
 
 check:
+    just woodpecker-check
     just rust-check
+
+check-ci:
+    just check
+    just rust-test-ci
 
 test:
     just rust-test
@@ -55,6 +60,12 @@ rust-test *FILTER='':
         --no-tests=pass \
         {{FILTER}}
 
+rust-test-ci *FILTER='':
+    cargo nextest run \
+        --no-tests=pass \
+        --profile ci \
+        {{FILTER}}
+
 rust-watch:
     cargo watch --exec run
 
@@ -105,5 +116,13 @@ release-build:
         print $"(ansi green)OK: ($output)(ansi reset)"
     }
 
-release-upload tag:
-    bun scripts/release-upload.ts {{ tag }}
+release-upload TAG:
+    bun scripts/release-upload.ts {{ TAG }}
+
+woodpecker-check:
+    #!/usr/bin/env nu
+    glob .woodpecker/*.yml | each {|f|
+        print $"Linting ($f)..."
+        woodpecker-cli lint $f
+    }
+    print $"(ansi green)OK: All woodpecker configs valid(ansi reset)"
