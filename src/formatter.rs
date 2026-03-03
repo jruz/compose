@@ -155,10 +155,17 @@ pub fn render_error(name: &str) -> String {
 }
 
 fn render_summary(tag: &str, stderr_lines: &[String]) -> String {
+    let use_color = std::io::stdout().is_terminal();
+    let red = if use_color {
+        Style::new().red()
+    } else {
+        Style::new()
+    };
+
     let mut parts: Vec<String> = Vec::new();
-    parts.push(format!("{tag} --- last stderr ---"));
+    parts.push(format!("{tag} {}", "--- last stderr ---".style(red)));
     for line in stderr_lines {
-        parts.push(format!("{tag} {line}"));
+        parts.push(format!("{tag} {}", line.style(red)));
     }
     parts.join("\n")
 }
