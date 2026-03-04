@@ -1,0 +1,8 @@
+processes:
+  stubborn:
+    docker:
+      build: ./app
+      stop_timeout_secs: 1
+
+  trigger:
+    command: "echo trigger-done && exit 0"

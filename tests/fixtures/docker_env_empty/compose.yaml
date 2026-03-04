@@ -1,0 +1,7 @@
+processes:
+  empty-env-main:
+    docker:
+      build: ./app
+    env:
+      EMPTY_VAR: ""
+      SET_VAR: "has-value"

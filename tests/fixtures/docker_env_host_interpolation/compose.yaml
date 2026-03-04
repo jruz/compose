@@ -1,0 +1,6 @@
+processes:
+  host-env-main:
+    docker:
+      build: ./app
+    env:
+      RESULT: "${DOCKER_HOST_TEST_VAR}"
