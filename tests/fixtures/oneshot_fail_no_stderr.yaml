@@ -1,0 +1,8 @@
+processes:
+  init:
+    type: oneshot
+    command: "exit 1"
+
+  main:
+    command: "echo main-started"
+    depends_on: [init]

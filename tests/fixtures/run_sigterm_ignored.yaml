@@ -1,0 +1,6 @@
+processes:
+  stubborn:
+    command: "trap '' TERM && echo stubborn-started && exec sleep 30"
+
+  main:
+    command: "echo main-done && exit 0"

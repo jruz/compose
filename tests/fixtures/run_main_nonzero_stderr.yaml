@@ -1,0 +1,3 @@
+processes:
+  main:
+    command: "echo >&2 'FATAL: main process error' && exit 1"

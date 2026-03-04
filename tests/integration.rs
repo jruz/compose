@@ -337,6 +337,44 @@ mod exec {
     }
 
     #[test]
+    fn stderr_overflow_shows_last_20() {
+        let output = run_fixture("run_stderr_overflow.yaml", "run");
+        assert_exit_code(&output, 1);
+        assert_stdout_contains(&output, "--- last stderr ---");
+        assert_stdout_contains(&output, "stderr-line-30");
+        assert_stdout_contains(&output, "stderr-line-11");
+        let stdout = stdout_of(&output);
+        let summary_section = stdout
+            .split_once("--- last stderr ---")
+            .expect("no summary")
+            .1;
+        assert!(
+            !summary_section.contains("stderr-line-1\n"),
+            "stderr-line-1 should have been truncated from the 20-line buffer\nstdout: {stdout}"
+        );
+    }
+
+    #[test]
+    fn main_nonzero_no_stderr_summary() {
+        let output = run_fixture("run_main_nonzero_stderr.yaml", "run");
+        assert_exit_code(&output, 1);
+        assert_stdout_contains(&output, "FATAL: main process error");
+        let stdout = stdout_of(&output);
+        assert!(
+            !stdout.contains("--- last stderr ---"),
+            "main process exit path should not show stderr summary\nstdout: {stdout}"
+        );
+    }
+
+    #[test]
+    fn sigterm_ignored_gets_sigkill() {
+        let output = run_fixture("run_sigterm_ignored.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "stubborn-started");
+        assert_stdout_contains(&output, "main-done");
+    }
+
+    #[test]
     fn shell_bash() {
         let output = run_fixture("shell_bash.yaml", "run");
         assert_exit_code(&output, 0);
@@ -605,6 +643,18 @@ mod oneshot {
         assert_exit_code(&output, 1);
         assert_stdout_contains(&output, "exited with code 1");
     }
+
+    #[test]
+    fn oneshot_fail_no_stderr() {
+        let output = run_fixture("oneshot_fail_no_stderr.yaml", "run");
+        assert_exit_code(&output, 1);
+        assert_stdout_contains(&output, "exited with code 1");
+        let stdout = stdout_of(&output);
+        assert!(
+            !stdout.contains("--- last stderr ---"),
+            "no stderr summary expected when process has no stderr\nstdout: {stdout}"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -747,6 +797,13 @@ mod validation {
         let output = run_fixture("validation_unknown_field.yaml", "run");
         assert_ne!(output.status.code(), Some(0_i32));
         assert_stdout_contains(&output, "unknown field");
+    }
+
+    #[test]
+    fn nonexistent_shell_binary() {
+        let output = run_fixture("shell_nonexistent.yaml", "run");
+        assert_ne!(output.status.code(), Some(0_i32));
+        assert_stdout_contains(&output, "failed to spawn");
     }
 }
 
