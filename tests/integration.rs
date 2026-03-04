@@ -451,6 +451,7 @@ mod env {
         assert_ne!(output.status.code(), Some(0_i32));
         assert_stdout_contains(&output, "circular variable interpolation: A -> A");
     }
+
     #[test]
     fn env_circular_interpolation() {
         let output = run_fixture("env_circular.yaml", "run");
@@ -477,6 +478,49 @@ mod env {
         let output = run_fixture("env_empty_ref.yaml", "run");
         assert_exit_code(&output, 0);
         assert_stdout_contains(&output, "RESULT=before-${}-after");
+    }
+
+    #[test]
+    fn env_file_with_equals_in_value() {
+        let output = run_fixture("env_file_equals.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(
+            &output,
+            "CONNECTION=postgres://user:pass=word@host:5432/db=name",
+        );
+    }
+
+    #[test]
+    fn env_file_skips_empty_and_whitespace_lines() {
+        let output = run_fixture("env_file_whitespace.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "FIRST=one");
+        assert_stdout_contains(&output, "SECOND=two");
+    }
+
+    #[test]
+    fn env_file_duplicate_keys_last_wins() {
+        let output = run_fixture("env_file_duplicate.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "KEY=second");
+    }
+
+    #[test]
+    fn env_file_skips_comment_lines() {
+        let output = run_fixture("env_file_comments.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "KEY=value");
+        assert_stdout_contains(&output, "OTHER=data");
+    }
+
+    #[test]
+    fn env_precedence_chain() {
+        let output = run_with_env_file("env_precedence.yaml", "run", "env_precedence_global.env");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "SHARED=from-inline");
+        assert_stdout_contains(&output, "GLOBAL_ONLY=global-val");
+        assert_stdout_contains(&output, "PROC_ONLY=proc-val");
+        assert_stdout_contains(&output, "INLINE_ONLY=inline-val");
     }
 }
 
