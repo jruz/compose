@@ -1,12 +1,31 @@
 # compose
 
-- Simple process orchestrator.
-- Reads a YAML compose file and runs processes with colored, prefixed output.
-- Processes start in dependency order, health checks gate dependent processes.
+- Process orchestrator for shell commands and docker containers
+- Colored, prefixed output per process
+- Dependency ordering and health checks
+- Dependency failure stops the entire workflow
+- Exit code of the last process is forwarded
 
 <img src="examples/vhs/hero.gif" width="600">
 
 ## Install
+
+Nix flake input:
+
+```nix
+inputs.composeSrc.url = "git+https://codeberg.org/jruz/compose.git?ref=main";
+```
+
+Then add to your devshell:
+
+```nix
+let
+  compose = composeSrc.packages.${system}.default;
+in
+pkgs.mkShell {
+  buildInputs = [ compose ];
+}
+```
 
 From source:
 
@@ -87,7 +106,7 @@ Instead of running shell commands, processes can run as docker containers.
 compose up --config compose.yaml
 ```
 
-Example config — postgres, redis, and nginx:
+Example config — postgres, redis, and nginx with `${VAR}` interpolation:
 
 ```yaml
 processes:
@@ -95,10 +114,10 @@ processes:
     docker:
       image: postgres:16-alpine
       ports:
-        - "5432:5432"
+        - "${PG_PORT}:5432"
     env:
-      POSTGRES_PASSWORD: devpass
-      POSTGRES_DB: app
+      POSTGRES_PASSWORD: "${PG_PASSWORD}"
+      POSTGRES_DB: "${PG_DB}"
     health:
       command: "pg_isready -U postgres"
       interval_secs: 1
@@ -108,7 +127,7 @@ processes:
     docker:
       image: redis:7-alpine
       ports:
-        - "6379:6379"
+        - "${REDIS_PORT}:6379"
     health:
       command: "redis-cli ping"
       interval_secs: 1
@@ -118,8 +137,14 @@ processes:
     docker:
       image: nginx:alpine
       ports:
-        - "8080:80"
+        - "${API_PORT}:80"
     depends_on: [postgres, redis]
+```
+
+With a sops-encrypted env file:
+
+```
+compose up --config compose.yaml --env-file <(sops --decrypt secrets.env)
 ```
 
 Build from a Dockerfile instead of pulling an image:
@@ -153,6 +178,22 @@ From a `.env` applied to all processes:
 
 ```
 compose run --config compose.yaml --env-file .env
+```
+
+With sops-encrypted secrets via process substitution:
+
+```
+compose run --config compose.yaml --env-file <(sops --decrypt secrets.env)
+```
+
+Variable interpolation with `${VAR}` in env values:
+
+```yaml
+processes:
+  app:
+    command: "node server.js"
+    env:
+      DATABASE_URL: "postgres://user:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
 ```
 
 Precedence: process env > env file > host environment.
