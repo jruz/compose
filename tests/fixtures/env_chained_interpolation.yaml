@@ -1,0 +1,7 @@
+processes:
+  main:
+    command: "echo A=$A B=$B C=$C && exit 0"
+    env:
+      A: "${B}"
+      B: "${C}"
+      C: "value"
