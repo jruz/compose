@@ -1,0 +1,4 @@
+processes:
+  main:
+    command: "echo hello"
+    bogus_field: "should fail"

@@ -695,6 +695,59 @@ mod validation {
         assert_ne!(output.status.code(), Some(0_i32));
         assert_stdout_contains(&output, "ERROR");
     }
+
+    #[test]
+    fn health_empty_command_string() {
+        let output = run_fixture("validation_health_empty_command.yaml", "run");
+        assert_ne!(output.status.code(), Some(0_i32));
+        assert_stdout_contains(&output, "must specify command or exec");
+    }
+
+    #[test]
+    fn health_empty_exec_array() {
+        let output = run_fixture("validation_health_empty_exec.yaml", "run");
+        assert_ne!(output.status.code(), Some(0_i32));
+        assert_stdout_contains(&output, "must specify command or exec");
+    }
+
+    #[test]
+    fn health_zero_intervals_accepted() {
+        let output = run_fixture("validation_health_zero_intervals.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "healthy");
+    }
+
+    #[test]
+    fn env_file_line_without_equals() {
+        let output = run_fixture("validation_env_file_no_equals.yaml", "run");
+        assert_ne!(output.status.code(), Some(0_i32));
+        assert_stdout_contains(&output, "malformed env file");
+    }
+
+    #[test]
+    fn env_file_nonexistent_path() {
+        let output = run_fixture("validation_env_file_nonexistent.yaml", "run");
+        assert_ne!(output.status.code(), Some(0_i32));
+        assert_stdout_contains(&output, "failed to read");
+    }
+
+    #[test]
+    fn global_env_file_nonexistent() {
+        let output = run_with_env_file(
+            "run_exit_zero.yaml",
+            "run",
+            "/tmp/nonexistent_global_env_98765.env",
+        );
+        assert_ne!(output.status.code(), Some(0_i32));
+        assert_stdout_contains(&output, "failed to read");
+    }
+
+    #[test]
+    fn unknown_yaml_field_rejected() {
+        let output = run_fixture("validation_unknown_field.yaml", "run");
+        assert_ne!(output.status.code(), Some(0_i32));
+        assert_stdout_contains(&output, "unknown field");
+    }
 }
 
 #[cfg(test)]
