@@ -1,0 +1,11 @@
+processes:
+  service:
+    command: "(sleep 2 && touch /tmp/compose_health_retry_flag_99887) & echo service-started && exec sleep 10"
+    health:
+      command: "test -f /tmp/compose_health_retry_flag_99887 && rm -f /tmp/compose_health_retry_flag_99887"
+      interval_secs: 1
+      timeout_secs: 5
+
+  consumer:
+    command: "echo consumer-started && exit 0"
+    depends_on: [service]
