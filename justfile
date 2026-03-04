@@ -7,7 +7,7 @@ check:
 
 check-ci:
     just check
-    just rust-test-ci
+    just rust-test
 
 test:
     just rust-test
@@ -58,12 +58,6 @@ rust-outdated:
 rust-test *FILTER='':
     cargo nextest run \
         --no-tests=pass \
-        {{FILTER}}
-
-rust-test-ci *FILTER='':
-    cargo nextest run \
-        --no-tests=pass \
-        --profile ci \
         {{FILTER}}
 
 rust-watch:
