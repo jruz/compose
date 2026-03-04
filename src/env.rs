@@ -33,8 +33,11 @@ fn interpolate(env: &mut BTreeMap<String, String>) -> Result<(), Error> {
     detect_interpolation_cycles(env)?;
     loop {
         let snapshot = env.clone();
-        for value in env.values_mut() {
-            *value = interpolate_value(value, &snapshot);
+        let keys: Vec<String> = env.keys().cloned().collect();
+        for key in &keys {
+            if let Some(value) = env.get_mut(key) {
+                *value = interpolate_value(key, value, &snapshot);
+            }
         }
         if *env == snapshot {
             break;
@@ -43,7 +46,7 @@ fn interpolate(env: &mut BTreeMap<String, String>) -> Result<(), Error> {
     Ok(())
 }
 
-fn interpolate_value(value: &str, env: &BTreeMap<String, String>) -> String {
+fn interpolate_value(key: &str, value: &str, env: &BTreeMap<String, String>) -> String {
     let mut result = String::with_capacity(value.len());
     let mut chars = value.chars().peekable();
 
@@ -54,7 +57,15 @@ fn interpolate_value(value: &str, env: &BTreeMap<String, String>) -> String {
                 .by_ref()
                 .take_while(|&closing| closing != '}')
                 .collect();
-            if let Some(resolved) = env.get(&var_name) {
+            if var_name == key {
+                if let Ok(host_val) = std::env::var(&var_name) {
+                    result.push_str(&host_val);
+                } else {
+                    result.push_str("${");
+                    result.push_str(&var_name);
+                    result.push('}');
+                }
+            } else if let Some(resolved) = env.get(&var_name) {
                 result.push_str(resolved);
             } else if let Ok(host_val) = std::env::var(&var_name) {
                 result.push_str(&host_val);
@@ -91,7 +102,7 @@ fn build_ref_graph(env: &BTreeMap<String, String>) -> BTreeMap<&str, Vec<String>
         .map(|(key, value)| {
             let deps: Vec<String> = parse_var_refs(value)
                 .into_iter()
-                .filter(|var| env.contains_key(var.as_str()))
+                .filter(|var| var != key && env.contains_key(var.as_str()))
                 .collect();
             (key.as_str(), deps)
         })

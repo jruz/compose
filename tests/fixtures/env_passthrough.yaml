@@ -1,0 +1,5 @@
+processes:
+  main:
+    command: "echo MY_VAR=$MY_VAR && exit 0"
+    env:
+      MY_VAR: "${MY_VAR}"
