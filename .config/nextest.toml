@@ -4,6 +4,3 @@ max-threads = 1
 [[profile.default.overrides]]
 filter = "test(docker)"
 test-group = "docker"
-
-[profile.ci]
-default-filter = "not test(docker)"

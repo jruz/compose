@@ -29,7 +29,7 @@
           woodpecker-cli
         ];
         darwinPackages = with pkgs; [ libiconv ];
-        linuxPackages = with pkgs; [ glibc glibcLocales ];
+        linuxPackages = with pkgs; [ docker-client glibc glibcLocales ];
         platformPackages =
           if pkgs.stdenv.isDarwin then
             commonPackages ++ darwinPackages
