@@ -306,6 +306,16 @@ mod exec {
     }
 
     #[test]
+    fn health_check_retry_then_healthy() {
+        let output = run_fixture("health_check_retry.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "service-started");
+        assert_stdout_contains(&output, "healthy");
+        assert_stdout_contains(&output, "consumer-started");
+        assert_stdout_order(&output, &["service-started", "healthy", "consumer-started"]);
+    }
+
+    #[test]
     fn health_timeout_kills_process() {
         let output = run_fixture("health_timeout_kills_process.yaml", "run");
         assert_exit_code(&output, 1);
