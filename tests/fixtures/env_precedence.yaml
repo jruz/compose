@@ -1,0 +1,7 @@
+processes:
+  main:
+    command: "echo SHARED=$SHARED GLOBAL_ONLY=$GLOBAL_ONLY PROC_ONLY=$PROC_ONLY INLINE_ONLY=$INLINE_ONLY && exit 0"
+    env_file: tests/fixtures/env_precedence_process.env
+    env:
+      SHARED: "from-inline"
+      INLINE_ONLY: "inline-val"

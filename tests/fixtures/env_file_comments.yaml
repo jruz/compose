@@ -1,0 +1,4 @@
+processes:
+  main:
+    command: "echo KEY=$KEY OTHER=$OTHER && exit 0"
+    env_file: tests/fixtures/env_file_comments.env
