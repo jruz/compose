@@ -1,0 +1,6 @@
+processes:
+  main:
+    command: "echo RESULT=$RESULT && exit 0"
+    env:
+      LOCAL: "compose-val"
+      RESULT: "${LOCAL}:${HOST_MIX_VAR}"

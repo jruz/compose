@@ -1,0 +1,5 @@
+processes:
+  main:
+    command: "printenv RESULT && exit 0"
+    env:
+      RESULT: "${NONEXISTENT}"

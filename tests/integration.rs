@@ -421,10 +421,62 @@ mod env {
     }
 
     #[test]
+    fn env_undefined_var_stays_literal() {
+        let output = run_fixture("env_undefined_var.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "${NONEXISTENT}");
+    }
+
+    #[test]
+    fn env_empty_value_interpolation() {
+        let output = run_fixture("env_empty_value.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "OTHER=prefix--suffix");
+    }
+
+    #[test]
+    fn env_mixed_host_and_compose_vars() {
+        let output = run_fixture_with_host_env(
+            "env_mixed_host_compose.yaml",
+            "run",
+            &[("HOST_MIX_VAR", "host-val")],
+        );
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "RESULT=compose-val:host-val");
+    }
+
+    #[test]
+    fn env_self_referencing_cycle() {
+        let output = run_fixture("env_self_ref.yaml", "run");
+        assert_ne!(output.status.code(), Some(0_i32));
+        assert_stdout_contains(&output, "circular variable interpolation: A -> A");
+    }
+    #[test]
     fn env_circular_interpolation() {
         let output = run_fixture("env_circular.yaml", "run");
         assert_ne!(output.status.code(), Some(0_i32));
         assert_stdout_contains(&output, "circular variable interpolation");
+    }
+
+    #[test]
+    fn env_dollar_without_braces_stays_literal() {
+        let output = run_fixture("env_dollar_no_braces.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "RESULT=$FOO is literal");
+    }
+
+    #[test]
+    fn env_unclosed_brace_heals() {
+        let output = run_fixture("env_unclosed_brace.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "RESULT=before-${FOO}");
+    }
+
+    #[test]
+    fn env_empty_ref_stays_literal() {
+        let output = run_fixture("env_empty_ref.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "RESULT=before-${}-after");
     }
 }
 
