@@ -1,0 +1,6 @@
+processes:
+  main:
+    command: "echo OTHER=$OTHER && exit 0"
+    env:
+      KEY: ""
+      OTHER: "prefix-${KEY}-suffix"

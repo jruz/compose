@@ -1,0 +1,5 @@
+processes:
+  main:
+    command: "echo $A && exit 0"
+    env:
+      A: "prefix-${A}"

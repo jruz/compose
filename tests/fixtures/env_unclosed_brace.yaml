@@ -1,0 +1,5 @@
+processes:
+  main:
+    command: "echo RESULT=$RESULT && exit 0"
+    env:
+      RESULT: "before-${FOO"
