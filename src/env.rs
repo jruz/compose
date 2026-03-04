@@ -51,6 +51,8 @@ fn interpolate_value(value: &str, env: &BTreeMap<String, String>) -> String {
                 .collect();
             if let Some(resolved) = env.get(&var_name) {
                 result.push_str(resolved);
+            } else if let Ok(host_val) = std::env::var(&var_name) {
+                result.push_str(&host_val);
             } else {
                 result.push_str("${");
                 result.push_str(&var_name);
