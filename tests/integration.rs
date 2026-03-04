@@ -489,6 +489,17 @@ mod env {
     }
 
     #[test]
+    fn env_passthrough() {
+        let output = run_fixture_with_host_env(
+            "env_passthrough.yaml",
+            "run",
+            &[("MY_VAR", "passed-through")],
+        );
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "MY_VAR=passed-through");
+    }
+
+    #[test]
     fn env_undefined_var_stays_literal() {
         let output = run_fixture("env_undefined_var.yaml", "run");
         assert_exit_code(&output, 0);
@@ -514,10 +525,10 @@ mod env {
     }
 
     #[test]
-    fn env_self_referencing_cycle() {
-        let output = run_fixture("env_self_ref.yaml", "run");
-        assert_ne!(output.status.code(), Some(0_i32));
-        assert_stdout_contains(&output, "circular variable interpolation: A -> A");
+    fn env_self_ref_resolves_from_host() {
+        let output = run_fixture_with_host_env("env_self_ref.yaml", "run", &[("A", "host-value")]);
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "A=prefix-host-value");
     }
 
     #[test]
@@ -1070,6 +1081,17 @@ mod docker {
         assert_exit_code(&output, 0);
         assert_stdout_contains(&output, "EMPTY_VAR=[]");
         assert_stdout_contains(&output, "SET_VAR=[has-value]");
+    }
+
+    #[test]
+    fn docker_env_passthrough() {
+        let output = run_docker_fixture_with_host_env(
+            "docker_env_passthrough",
+            "run",
+            &[("MY_VAR", "passed-through")],
+        );
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "MY_VAR=passed-through");
     }
 
     #[test]

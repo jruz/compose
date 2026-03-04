@@ -1,0 +1,6 @@
+processes:
+  passthrough:
+    docker:
+      build: ./app
+    env:
+      MY_VAR: "${MY_VAR}"
