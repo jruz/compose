@@ -401,6 +401,15 @@ mod env {
     }
 
     #[test]
+    fn env_chained_interpolation() {
+        let output = run_fixture("env_chained_interpolation.yaml", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "A=value");
+        assert_stdout_contains(&output, "B=value");
+        assert_stdout_contains(&output, "C=value");
+    }
+
+    #[test]
     fn env_host_interpolation() {
         let output = run_fixture_with_host_env(
             "env_host_interpolation.yaml",

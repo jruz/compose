@@ -31,9 +31,14 @@ fn apply_inline_env(env: &mut BTreeMap<String, String>, proc_def: &config::Proce
 
 fn interpolate(env: &mut BTreeMap<String, String>) -> Result<(), Error> {
     detect_interpolation_cycles(env)?;
-    let snapshot: BTreeMap<String, String> = env.clone();
-    for value in env.values_mut() {
-        *value = interpolate_value(value, &snapshot);
+    loop {
+        let snapshot = env.clone();
+        for value in env.values_mut() {
+            *value = interpolate_value(value, &snapshot);
+        }
+        if *env == snapshot {
+            break;
+        }
     }
     Ok(())
 }
