@@ -1,0 +1,5 @@
+processes:
+  main:
+    command: "echo RESULT=$MY_COMPOSED_VAR && exit 0"
+    env:
+      MY_COMPOSED_VAR: "${HOST_TEST_VAR}"

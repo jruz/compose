@@ -54,6 +54,24 @@ mod helpers {
         }
     }
 
+    pub fn run_fixture_with_host_env(
+        fixture: &str,
+        subcommand: &str,
+        env_vars: &[(&str, &str)],
+    ) -> Output {
+        let mut cmd = std::process::Command::new(binary_path());
+        cmd.arg(subcommand)
+            .arg("--config")
+            .arg(fixture_path(fixture));
+        for (key, value) in env_vars {
+            cmd.env(key, value);
+        }
+        match cmd.output() {
+            Ok(output) => output,
+            Err(err) => panic!("failed to execute binary: {err}"),
+        }
+    }
+
     pub fn run_shell_script(script: &str) -> Output {
         match std::process::Command::new("sh")
             .arg("-c")
@@ -380,6 +398,17 @@ mod env {
         let output = run_fixture("env_interpolation.yaml", "run");
         assert_exit_code(&output, 0);
         assert_stdout_contains(&output, "postgres://admin:secret@db:5432/mydb");
+    }
+
+    #[test]
+    fn env_host_interpolation() {
+        let output = run_fixture_with_host_env(
+            "env_host_interpolation.yaml",
+            "run",
+            &[("HOST_TEST_VAR", "from-host")],
+        );
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "RESULT=from-host");
     }
 
     #[test]
