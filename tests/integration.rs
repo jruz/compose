@@ -72,6 +72,26 @@ mod helpers {
         }
     }
 
+    pub fn run_docker_fixture_with_host_env(
+        fixture_dir: &str,
+        subcommand: &str,
+        env_vars: &[(&str, &str)],
+    ) -> Output {
+        let dir = fixture_path(fixture_dir);
+        let mut cmd = std::process::Command::new(binary_path());
+        cmd.arg(subcommand)
+            .arg("--config")
+            .arg("compose.yaml")
+            .current_dir(&dir);
+        for (key, value) in env_vars {
+            cmd.env(key, value);
+        }
+        match cmd.output() {
+            Ok(output) => output,
+            Err(err) => panic!("failed to execute binary: {err}"),
+        }
+    }
+
     pub fn run_shell_script(script: &str) -> Output {
         match std::process::Command::new("sh")
             .arg("-c")
@@ -1031,5 +1051,44 @@ mod docker {
         let output = run_docker_fixture("docker_exec", "run");
         assert_exit_code(&output, 0);
         assert_stdout_contains(&output, "hello from exec");
+    }
+
+    #[test]
+    fn docker_env_host_interpolation() {
+        let output = run_docker_fixture_with_host_env(
+            "docker_env_host_interpolation",
+            "run",
+            &[("DOCKER_HOST_TEST_VAR", "host-resolved")],
+        );
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "RESULT=host-resolved");
+    }
+
+    #[test]
+    fn docker_env_empty_value() {
+        let output = run_docker_fixture("docker_env_empty", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "EMPTY_VAR=[]");
+        assert_stdout_contains(&output, "SET_VAR=[has-value]");
+    }
+
+    #[test]
+    fn docker_stop_timeout() {
+        let output = run_docker_fixture("docker_stop_timeout", "run");
+        assert_exit_code(&output, 0);
+        assert_stdout_contains(&output, "trigger-done");
+        assert_stdout_contains(&output, "removing containers");
+    }
+
+    #[test]
+    fn docker_build_failure() {
+        let output = run_docker_fixture("docker_build_failure", "run");
+        assert_ne!(output.status.code(), Some(0_i32));
+        let stdout = stdout_of(&output);
+        assert!(
+            stdout.contains("ERROR") || stdout.contains("error"),
+            "expected error in stdout\nstdout: {stdout}\nstderr: {}",
+            stderr_of(&output)
+        );
     }
 }
