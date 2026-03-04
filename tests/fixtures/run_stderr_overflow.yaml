@@ -1,0 +1,6 @@
+processes:
+  crasher:
+    command: "for i in $(seq 1 30); do echo >&2 \"stderr-line-$i\"; done && exit 1"
+
+  main:
+    command: "exec sleep 10"

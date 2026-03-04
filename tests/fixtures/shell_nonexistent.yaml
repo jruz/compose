@@ -1,0 +1,4 @@
+shell: /usr/bin/nonexistent-shell-98765
+processes:
+  main:
+    command: "echo hello"
