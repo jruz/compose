@@ -1,6 +1,0 @@
-processes:
-  vol-main:
-    docker:
-      build: ./app
-      volumes:
-        - "/Users/jruz/dev/projects/compose/tests/fixtures/docker_volumes/data:/mnt/data"
