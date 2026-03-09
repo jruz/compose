@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
+use tokio::io::BufReader;
 use tokio::sync::mpsc;
 
+use crate::actor;
 use crate::cli;
 use crate::config;
 use crate::docker;
@@ -197,7 +199,56 @@ async fn build_images(
             Some(image) => image.as_str(),
             None => name,
         };
-        docker::build(tag, build_context, docker_config.dockerfile.as_deref()).await?;
+
+        let mut child =
+            docker::build_command(tag, build_context, docker_config.dockerfile.as_deref())
+                .spawn()
+                .map_err(|source| docker::Error::Build {
+                    context: build_context.clone(),
+                    source,
+                })?;
+
+        let stdout_handle = child.stdout.take().map(|stdout| {
+            let tx = display_tx.clone();
+            let proc_name = name.clone();
+            tokio::spawn(async move {
+                actor::stream_lines(&proc_name, BufReader::new(stdout), &tx, None).await;
+            })
+        });
+
+        let stderr_handle = child.stderr.take().map(|stderr| {
+            let tx = display_tx.clone();
+            let proc_name = name.clone();
+            tokio::spawn(async move {
+                actor::stream_lines(&proc_name, BufReader::new(stderr), &tx, None).await;
+            })
+        });
+
+        let status = child.wait().await.map_err(|source| docker::Error::Build {
+            context: build_context.clone(),
+            source,
+        })?;
+
+        if let Some(handle) = stdout_handle {
+            drop(handle.await);
+        }
+        if let Some(handle) = stderr_handle {
+            drop(handle.await);
+        }
+
+        if !status.success() {
+            let Some(code) = status.code() else {
+                return Err(docker::Error::BuildKilled {
+                    context: build_context.clone(),
+                }
+                .into());
+            };
+            return Err(docker::Error::BuildFailed {
+                context: build_context.clone(),
+                code,
+            }
+            .into());
+        }
 
         send_display(
             display_tx,
