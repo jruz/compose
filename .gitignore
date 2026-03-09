@@ -1,3 +1,4 @@
 /target
 .direnv
 PLAN.md
+tests/fixtures/docker_volumes/compose.yaml
