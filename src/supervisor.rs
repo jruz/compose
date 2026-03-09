@@ -212,7 +212,7 @@ async fn build_images(
             let tx = display_tx.clone();
             let proc_name = name.clone();
             tokio::spawn(async move {
-                actor::stream_lines(&proc_name, BufReader::new(stdout), &tx, None).await;
+                actor::stream_lines(&proc_name, BufReader::new(stdout), &tx).await;
             })
         });
 
@@ -220,7 +220,7 @@ async fn build_images(
             let tx = display_tx.clone();
             let proc_name = name.clone();
             tokio::spawn(async move {
-                actor::stream_lines(&proc_name, BufReader::new(stderr), &tx, None).await;
+                actor::stream_lines(&proc_name, BufReader::new(stderr), &tx).await;
             })
         });
 

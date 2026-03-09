@@ -1,5 +1,4 @@
 use std::os::unix::process::ExitStatusExt as _;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use nix::sys::signal::{self, Signal};
@@ -42,8 +41,8 @@ enum HealthOutcome {
 }
 
 pub struct OutputDrain {
-    stderr_buffer: Arc<Mutex<Vec<String>>>,
     stderr_done: oneshot::Receiver<()>,
+    stderr_rx: mpsc::UnboundedReceiver<String>,
     stdout_done: oneshot::Receiver<()>,
 }
 
@@ -67,7 +66,7 @@ pub fn setup_output_drain(
 ) -> OutputDrain {
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    let stderr_buffer: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let (stderr_cap_tx, stderr_cap_rx) = mpsc::unbounded_channel::<String>();
 
     let (stdout_done_tx, stdout_done_rx) = oneshot::channel::<()>();
     let (stderr_done_tx, stderr_done_rx) = oneshot::channel::<()>();
@@ -76,7 +75,7 @@ pub fn setup_output_drain(
         let tx = display_tx.clone();
         let proc_name = name.to_string();
         tokio::spawn(async move {
-            stream_lines(&proc_name, BufReader::new(stdout), &tx, None).await;
+            stream_lines(&proc_name, BufReader::new(stdout), &tx).await;
             match stdout_done_tx.send(()) {
                 Ok(()) | Err(()) => {}
             }
@@ -89,9 +88,31 @@ pub fn setup_output_drain(
 
     if let Some(stderr) = stderr {
         let proc_name = name.to_string();
-        let buf = Arc::clone(&stderr_buffer);
         tokio::spawn(async move {
-            stream_lines(&proc_name, BufReader::new(stderr), &display_tx, Some(&buf)).await;
+            let mut lines = BufReader::new(stderr).lines();
+            loop {
+                match lines.next_line().await {
+                    Ok(Some(line)) => {
+                        match stderr_cap_tx.send(line.clone()) {
+                            Ok(()) | Err(_) => {}
+                        }
+                        if let Err(_send_err) = display_tx.send(message::DisplayMsg::Output {
+                            name: proc_name.clone(),
+                            line,
+                        }) {
+                            break;
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(err) => {
+                        if let Err(_send_err) = display_tx.send(message::DisplayMsg::Output {
+                            name: proc_name.clone(),
+                            line: format!("[pipe error: {err}]"),
+                        }) {}
+                        break;
+                    }
+                }
+            }
             match stderr_done_tx.send(()) {
                 Ok(()) | Err(()) => {}
             }
@@ -103,7 +124,7 @@ pub fn setup_output_drain(
     }
 
     OutputDrain {
-        stderr_buffer,
+        stderr_rx: stderr_cap_rx,
         stderr_done: stderr_done_rx,
         stdout_done: stdout_done_rx,
     }
@@ -119,7 +140,7 @@ pub async fn actor_loop(
     drain: OutputDrain,
 ) {
     let OutputDrain {
-        stderr_buffer,
+        mut stderr_rx,
         stdout_done,
         stderr_done,
     } = drain;
@@ -138,7 +159,7 @@ pub async fn actor_loop(
             HealthOutcome::ProcessExited(_status) => {
                 if let Err(_recv_err) = stdout_done.await {}
                 if let Err(_recv_err) = stderr_done.await {}
-                let stderr = extract_stderr(&stderr_buffer);
+                let stderr = drain_stderr(&mut stderr_rx).await;
                 let reason = if stderr.is_empty() {
                     "exited before becoming healthy".to_string()
                 } else {
@@ -188,7 +209,7 @@ pub async fn actor_loop(
     if let Err(_recv_err) = stderr_done.await {}
 
     let code = exit_code_from_status(status);
-    let stderr_lines = extract_stderr(&stderr_buffer);
+    let stderr_lines = drain_stderr(&mut stderr_rx).await;
 
     if let Err(_send_err) = event_tx.send(message::Event::Exited {
         name: name.clone(),
@@ -330,31 +351,24 @@ fn exit_code_from_status(status: std::process::ExitStatus) -> u8 {
     }
 }
 
-fn extract_stderr(buffer: &Arc<Mutex<Vec<String>>>) -> Vec<String> {
-    match buffer.lock() {
-        Ok(buf) => buf.clone(),
-        Err(poison) => poison.into_inner().clone(),
+async fn drain_stderr(rx: &mut mpsc::UnboundedReceiver<String>) -> Vec<String> {
+    let mut lines = Vec::new();
+    while let Some(line) = rx.recv().await {
+        lines.push(line);
     }
+    let skip = lines.len().saturating_sub(STDERR_BUFFER_LINES);
+    lines.into_iter().skip(skip).collect()
 }
 
 pub async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
     name: &str,
     reader: BufReader<R>,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-    capture: Option<&Mutex<Vec<String>>>,
 ) {
     let mut lines = reader.lines();
     loop {
         match lines.next_line().await {
             Ok(Some(line)) => {
-                if let Some(buf) = capture
-                    && let Ok(mut buf) = buf.lock()
-                {
-                    buf.push(line.clone());
-                    if buf.len() > STDERR_BUFFER_LINES {
-                        buf.remove(0);
-                    }
-                }
                 if let Err(_send_err) = display_tx.send(message::DisplayMsg::Output {
                     name: name.to_string(),
                     line,
