@@ -33,14 +33,18 @@ pub fn spawn_task(
     }
 
     let use_color = std::io::stdout().is_terminal();
+    let mut process_index = 0;
     let styles: Vec<(String, Style)> = names
         .iter()
-        .enumerate()
-        .map(|(idx, name)| {
-            let style = if use_color {
-                color_for_index(idx)
-            } else {
+        .map(|name| {
+            let style = if !use_color {
                 Style::new()
+            } else if name == "docker" {
+                Style::new().blue()
+            } else {
+                let style = color_for_index(process_index);
+                process_index += 1;
+                style
             };
             (name.clone(), style)
         })
