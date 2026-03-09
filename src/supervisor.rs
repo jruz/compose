@@ -42,7 +42,11 @@ pub async fn run(
     project_name: Option<String>,
     log_tx: mpsc::UnboundedSender<String>,
 ) -> Result<message::ExitResult, Error> {
-    let names: Vec<String> = config.processes.keys().cloned().collect();
+    let has_docker = config.processes.values().any(|proc| proc.docker.is_some());
+    let mut names: Vec<String> = config.processes.keys().cloned().collect();
+    if has_docker {
+        names.push("docker".to_string());
+    }
 
     let (event_tx, event_rx) = mpsc::unbounded_channel::<message::Event>();
     let (display_tx, display_rx) = mpsc::unbounded_channel::<message::DisplayMsg>();
@@ -63,34 +67,20 @@ pub async fn run(
         cli::Command::Up(_) => lifecycle::ShutdownStrategy::AnyExit,
     };
 
-    let first_docker_name = start_order
-        .iter()
-        .find(|name| {
-            config
-                .processes
-                .get(name.as_str())
-                .is_some_and(|proc| proc.docker.is_some())
-        })
-        .cloned();
-
-    let network_name = match &first_docker_name {
-        Some(docker_name) => {
-            let net = generate_network_name(project_name.as_deref());
-            send_display(
-                &display_tx,
-                message::DisplayMsg::CreatingNetwork {
-                    name: docker_name.clone(),
-                },
-            )?;
-            docker::network_create(&net).await?;
-            Some(net)
-        }
-        None => None,
-    };
-
-    if first_docker_name.is_some() {
+    let network_name = if has_docker {
+        let net = generate_network_name(project_name.as_deref());
+        send_display(
+            &display_tx,
+            message::DisplayMsg::CreatingNetwork {
+                name: "docker".to_string(),
+            },
+        )?;
+        docker::network_create(&net).await?;
         build_images(&config, &start_order, &display_tx).await?;
-    }
+        Some(net)
+    } else {
+        None
+    };
 
     let global_env = env::load_global(global_env_file.as_deref())?;
 
@@ -121,7 +111,7 @@ pub async fn run(
         }
     };
 
-    if let (Some(net), Some(tag_name)) = (&network_name, &first_docker_name) {
+    if let Some(net) = &network_name {
         let docker_names: Vec<String> = start_order
             .iter()
             .filter(|name| {
@@ -133,7 +123,7 @@ pub async fn run(
             .cloned()
             .collect();
 
-        cleanup_docker(&docker_names, net, tag_name, &display_tx).await;
+        cleanup_docker(&docker_names, net, &display_tx).await;
     }
 
     result
@@ -142,14 +132,13 @@ pub async fn run(
 async fn cleanup_docker(
     docker_names: &[String],
     network: &str,
-    tag_name: &str,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) {
     if !docker_names.is_empty() {
         if let Err(_send_err) = send_display(
             display_tx,
             message::DisplayMsg::RemovingContainers {
-                name: tag_name.to_string(),
+                name: "docker".to_string(),
             },
         ) {}
         for name in docker_names {
@@ -158,7 +147,7 @@ async fn cleanup_docker(
                 && let Err(_send_err) = send_display(
                     display_tx,
                     message::DisplayMsg::CleanupError {
-                        name: name.clone(),
+                        name: "docker".to_string(),
                         reason: rm_err.to_string(),
                     },
                 )
@@ -169,14 +158,14 @@ async fn cleanup_docker(
     if let Err(_send_err) = send_display(
         display_tx,
         message::DisplayMsg::RemovingNetwork {
-            name: tag_name.to_string(),
+            name: "docker".to_string(),
         },
     ) {}
     if let Err(rm_err) = docker::network_rm(network).await
         && let Err(_send_err) = send_display(
             display_tx,
             message::DisplayMsg::CleanupError {
-                name: tag_name.to_string(),
+                name: "docker".to_string(),
                 reason: rm_err.to_string(),
             },
         )
