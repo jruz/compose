@@ -57,31 +57,16 @@ pub fn container_name(network: &str, process_name: &str) -> String {
     format!("{network}-{process_name}")
 }
 
-pub async fn build(tag: &str, context: &str, dockerfile: Option<&str>) -> Result<(), Error> {
+pub fn build_command(tag: &str, context: &str, dockerfile: Option<&str>) -> process::Command {
     let mut cmd = process::Command::new("docker");
     cmd.arg("build").arg("--tag").arg(tag);
     if let Some(file) = dockerfile {
         cmd.arg("--file").arg(file);
     }
     cmd.arg(context);
-    let output = cmd.output().await.map_err(|source| Error::Build {
-        context: context.to_string(),
-        source,
-    })?;
-
-    if !output.status.success() {
-        let Some(code) = output.status.code() else {
-            return Err(Error::BuildKilled {
-                context: context.to_string(),
-            });
-        };
-        return Err(Error::BuildFailed {
-            context: context.to_string(),
-            code,
-        });
-    }
-
-    Ok(())
+    cmd.stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    cmd
 }
 
 pub fn run_command(run: &RunConfig<'_>) -> process::Command {

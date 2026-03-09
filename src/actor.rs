@@ -337,7 +337,7 @@ fn extract_stderr(buffer: &Arc<Mutex<Vec<String>>>) -> Vec<String> {
     }
 }
 
-async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
+pub async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
     name: &str,
     reader: BufReader<R>,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,

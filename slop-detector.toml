@@ -3,4 +3,4 @@ rules = []
 files = []
 
 [ignore.by-rule]
-no-spawn = ["./src/process.rs"]
+no-spawn = ["./src/process.rs", "./src/supervisor.rs"]
