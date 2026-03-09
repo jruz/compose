@@ -8,6 +8,7 @@ mod formatter;
 mod lifecycle;
 mod message;
 mod process;
+mod shutdown;
 mod startup;
 mod supervisor;
 
