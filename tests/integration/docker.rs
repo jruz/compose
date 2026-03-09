@@ -4,6 +4,7 @@ use super::helpers::*;
 fn docker_build() {
     let output = run_docker_fixture("docker_build", "run");
     assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "[docker] creating network");
     assert_stdout_contains(&output, "building");
     assert_stdout_contains(&output, "built");
     assert_stdout_contains(&output, "build works");
@@ -13,9 +14,9 @@ fn docker_build() {
 fn docker_cleanup() {
     let output = run_docker_fixture("docker_cleanup", "run");
     assert_exit_code(&output, 0);
-    assert_stdout_contains(&output, "creating network");
-    assert_stdout_contains(&output, "removing containers");
-    assert_stdout_contains(&output, "removing network");
+    assert_stdout_contains(&output, "[docker] creating network");
+    assert_stdout_contains(&output, "[docker] removing containers");
+    assert_stdout_contains(&output, "[docker] removing network");
 }
 
 #[test]
