@@ -2,14 +2,15 @@ use tokio::signal;
 use tokio::sync::mpsc;
 
 use crate::message;
+use crate::shutdown;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("display channel closed: {0}")]
-    DisplayChannelClosed(mpsc::error::SendError<message::DisplayMsg>),
-
     #[error("{name}: {reason}")]
     HealthFailed { name: String, reason: String },
+
+    #[error(transparent)]
+    Shutdown(#[from] shutdown::Error),
 
     #[error("failed to register signal handler: {source}")]
     SignalHandler { source: std::io::Error },
@@ -35,14 +36,14 @@ pub async fn manage(
             handle_event(event, &shutdown, all_names, &cmd_senders, display_tx)
         }
         Some(()) = sigterm.recv() => {
-            emit_killing_all(all_names, "signal received", display_tx)?;
-            kill_all(&cmd_senders);
+            shutdown::emit_killing_all(all_names, "signal received", display_tx)?;
+            shutdown::kill_all(&cmd_senders);
             Ok(message::ExitResult { code: 130, failed_name: None })
         }
         result = signal::ctrl_c() => {
             result.map_err(|source| Error::SignalHandler { source })?;
-            emit_killing_all(all_names, "signal received", display_tx)?;
-            kill_all(&cmd_senders);
+            shutdown::emit_killing_all(all_names, "signal received", display_tx)?;
+            shutdown::kill_all(&cmd_senders);
             Ok(message::ExitResult { code: 130, failed_name: None })
         }
     }
@@ -69,30 +70,30 @@ fn handle_event(
 
             match shutdown {
                 ShutdownStrategy::MainProcess(main_name) if *main_name == name => {
-                    send_display(
+                    shutdown::send_display(
                         display_tx,
                         message::DisplayMsg::Exited {
                             name: name.clone(),
                             code,
                         },
                     )?;
-                    emit_killing_all(&remaining, &format!("{name} exited"), display_tx)?;
-                    kill_all(cmd_senders);
+                    shutdown::emit_killing_all(&remaining, &format!("{name} exited"), display_tx)?;
+                    shutdown::kill_all(cmd_senders);
                     let failed_name = if code == 0 { None } else { Some(name) };
                     Ok(message::ExitResult { code, failed_name })
                 }
                 ShutdownStrategy::MainProcess(_) | ShutdownStrategy::AnyExit => {
                     let reason = format!("{name} crashed");
-                    send_display(
+                    shutdown::send_display(
                         display_tx,
                         message::DisplayMsg::Crashed {
                             name: name.clone(),
                             code,
                         },
                     )?;
-                    emit_killing_all(&remaining, &reason, display_tx)?;
+                    shutdown::emit_killing_all(&remaining, &reason, display_tx)?;
                     if !stderr_lines.is_empty() {
-                        send_display(
+                        shutdown::send_display(
                             display_tx,
                             message::DisplayMsg::Summary {
                                 name: name.clone(),
@@ -100,7 +101,7 @@ fn handle_event(
                             },
                         )?;
                     }
-                    kill_all(cmd_senders);
+                    shutdown::kill_all(cmd_senders);
                     Ok(message::ExitResult {
                         code: 1,
                         failed_name: Some(name),
@@ -113,46 +114,16 @@ fn handle_event(
             failed_name: None,
         }),
         message::Event::HealthFailed { name, reason } => {
-            send_display(
+            shutdown::send_display(
                 display_tx,
                 message::DisplayMsg::HealthFailed {
                     name: name.clone(),
                     reason: reason.clone(),
                 },
             )?;
-            emit_killing_all(all_names, &format!("{name} health failed"), display_tx)?;
-            kill_all(cmd_senders);
+            shutdown::emit_killing_all(all_names, &format!("{name} health failed"), display_tx)?;
+            shutdown::kill_all(cmd_senders);
             Err(Error::HealthFailed { name, reason })
         }
     }
-}
-
-fn kill_all(cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)]) {
-    for (_name, tx) in cmd_senders {
-        if let Err(_send_err) = tx.send(message::Command::Kill) {}
-    }
-}
-
-fn emit_killing_all(
-    names: &[String],
-    reason: &str,
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-) -> Result<(), Error> {
-    for name in names {
-        send_display(
-            display_tx,
-            message::DisplayMsg::Killing {
-                name: name.clone(),
-                reason: reason.to_string(),
-            },
-        )?;
-    }
-    Ok(())
-}
-
-fn send_display(
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-    msg: message::DisplayMsg,
-) -> Result<(), Error> {
-    display_tx.send(msg).map_err(Error::DisplayChannelClosed)
 }
