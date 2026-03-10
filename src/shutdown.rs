@@ -4,8 +4,8 @@ use crate::message;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("display channel closed: {0}")]
-    DisplayChannelClosed(mpsc::error::SendError<message::DisplayMsg>),
+    #[error("event channel closed: {0}")]
+    EventChannelClosed(mpsc::error::SendError<message::Event>),
 }
 
 pub fn kill_all(cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)]) {
@@ -17,23 +17,23 @@ pub fn kill_all(cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)
 pub fn emit_killing_all(
     names: &[String],
     reason: &str,
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    event_tx: &mpsc::UnboundedSender<message::Event>,
 ) -> Result<(), Error> {
     for name in names {
-        send_display(
-            display_tx,
-            message::DisplayMsg::Lifecycle(message::LifecycleMsg::Killing {
+        send_event(
+            event_tx,
+            message::Event::Killing {
                 name: name.clone(),
                 reason: reason.to_string(),
-            }),
+            },
         )?;
     }
     Ok(())
 }
 
-pub fn send_display(
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-    msg: message::DisplayMsg,
+pub fn send_event(
+    event_tx: &mpsc::UnboundedSender<message::Event>,
+    event: message::Event,
 ) -> Result<(), Error> {
-    display_tx.send(msg).map_err(Error::DisplayChannelClosed)
+    event_tx.send(event).map_err(Error::EventChannelClosed)
 }
