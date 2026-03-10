@@ -20,26 +20,23 @@ pub enum Command {
 }
 
 #[derive(Debug)]
-pub enum DisplayMsg {
-    Building {
-        name: String,
-    },
-    Built {
-        name: String,
-    },
-    CleanupError {
-        name: String,
-        reason: String,
-    },
+pub enum DockerMsg {
+    Building { name: String },
+    Built { name: String },
+    CleanupError { name: String, reason: String },
+    CreatingNetwork { name: String },
+    RemovingContainers { name: String },
+    RemovingNetwork { name: String },
+}
+
+#[derive(Debug)]
+pub enum LifecycleMsg {
     Completed {
         name: String,
     },
     Crashed {
         name: String,
         code: u8,
-    },
-    CreatingNetwork {
-        name: String,
     },
     Exited {
         name: String,
@@ -55,16 +52,6 @@ pub enum DisplayMsg {
     Killing {
         name: String,
         reason: String,
-    },
-    Output {
-        name: String,
-        line: String,
-    },
-    RemovingContainers {
-        name: String,
-    },
-    RemovingNetwork {
-        name: String,
     },
     Starting {
         name: String,
@@ -82,6 +69,18 @@ pub enum DisplayMsg {
     },
 }
 
+#[derive(Debug)]
+pub enum OutputMsg {
+    Line { name: String, line: String },
+}
+
+#[derive(Debug)]
+pub enum DisplayMsg {
+    Docker(DockerMsg),
+    Lifecycle(LifecycleMsg),
+    Output(OutputMsg),
+}
+
 pub struct ExitResult {
     pub code: u8,
     pub failed_name: Option<String>,
@@ -89,22 +88,26 @@ pub struct ExitResult {
 
 pub fn display_msg_name(msg: &DisplayMsg) -> &str {
     match msg {
-        DisplayMsg::Building { name }
-        | DisplayMsg::Built { name }
-        | DisplayMsg::CleanupError { name, .. }
-        | DisplayMsg::Completed { name }
-        | DisplayMsg::Crashed { name, .. }
-        | DisplayMsg::CreatingNetwork { name }
-        | DisplayMsg::Exited { name, .. }
-        | DisplayMsg::HealthFailed { name, .. }
-        | DisplayMsg::Healthy { name }
-        | DisplayMsg::Killing { name, .. }
-        | DisplayMsg::Output { name, .. }
-        | DisplayMsg::RemovingContainers { name }
-        | DisplayMsg::RemovingNetwork { name }
-        | DisplayMsg::Starting { name, .. }
-        | DisplayMsg::Summary { name, .. }
-        | DisplayMsg::WaitingCompletion { name }
-        | DisplayMsg::WaitingHealth { name } => name,
+        DisplayMsg::Docker(docker) => match docker {
+            DockerMsg::Building { name }
+            | DockerMsg::Built { name }
+            | DockerMsg::CleanupError { name, .. }
+            | DockerMsg::CreatingNetwork { name }
+            | DockerMsg::RemovingContainers { name }
+            | DockerMsg::RemovingNetwork { name } => name,
+        },
+        DisplayMsg::Lifecycle(lifecycle) => match lifecycle {
+            LifecycleMsg::Completed { name }
+            | LifecycleMsg::Crashed { name, .. }
+            | LifecycleMsg::Exited { name, .. }
+            | LifecycleMsg::HealthFailed { name, .. }
+            | LifecycleMsg::Healthy { name }
+            | LifecycleMsg::Killing { name, .. }
+            | LifecycleMsg::Starting { name, .. }
+            | LifecycleMsg::Summary { name, .. }
+            | LifecycleMsg::WaitingCompletion { name }
+            | LifecycleMsg::WaitingHealth { name } => name,
+        },
+        DisplayMsg::Output(OutputMsg::Line { name, .. }) => name,
     }
 }
