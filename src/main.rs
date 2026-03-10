@@ -1,4 +1,5 @@
 mod actor;
+mod build_actor;
 mod cli;
 mod config;
 mod docker;
