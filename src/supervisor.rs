@@ -55,7 +55,7 @@ pub async fn run(
     let (notify_tx, mut notify_rx) = mpsc::unbounded_channel::<message::Event>();
 
     let translator_tx = display_tx.clone();
-    let _translator_handle = tokio::spawn(async move {
+    let translator_handle = tokio::spawn(async move {
         while let Some(event) = notify_rx.recv().await {
             for msg in event_to_display(&event) {
                 if let Err(_send_err) = translator_tx.send(msg) {
@@ -144,6 +144,8 @@ pub async fn run(
 
         cleanup_docker(&docker_names, net, &display_tx).await;
     }
+
+    translator_handle.abort();
 
     result
 }
