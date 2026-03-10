@@ -36,6 +36,12 @@ pub enum Error {
     Shutdown(#[from] shutdown::Error),
 }
 
+pub struct Channels {
+    pub events: mpsc::UnboundedSender<message::Event>,
+    pub notify: mpsc::UnboundedSender<message::Event>,
+    pub output: mpsc::UnboundedSender<message::DisplayMsg>,
+}
+
 pub enum StartupResult {
     CrashedDuringStartup {
         code: u8,
@@ -103,8 +109,7 @@ pub async fn start_all(
     config: &config::Config,
     start_order: &[String],
     global_env: &BTreeMap<String, String>,
-    event_tx: &mpsc::UnboundedSender<message::Event>,
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    channels: &Channels,
     mut event_rx: mpsc::UnboundedReceiver<message::Event>,
     network: Option<&str>,
 ) -> Result<StartupResult, Error> {
@@ -132,76 +137,51 @@ pub async fn start_all(
             (None, None) => continue,
         };
 
-        shutdown::send_display(
-            display_tx,
-            message::DisplayMsg::Lifecycle(message::LifecycleMsg::Starting {
+        shutdown::send_event(
+            &channels.notify,
+            message::Event::Starting {
                 name: name.clone(),
                 command: start_label,
-            }),
+            },
         )?;
 
         let env = env::resolve(global_env, proc_def)?;
 
-        let cmd_tx =
-            spawn_process_actor(name, proc_def, shell, &env, network, event_tx, display_tx)?;
+        let cmd_tx = spawn_process_actor(
+            name,
+            proc_def,
+            shell,
+            &env,
+            network,
+            &channels.events,
+            &channels.output,
+        )?;
 
         if is_oneshot {
-            shutdown::send_display(
-                display_tx,
-                message::DisplayMsg::Lifecycle(message::LifecycleMsg::WaitingCompletion {
-                    name: name.clone(),
-                }),
-            )?;
-            match start_oneshot(name, &cmd_senders, &mut event_rx, display_tx).await? {
-                OneshotOutcome::Completed => {
-                    shutdown::send_display(
-                        display_tx,
-                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Completed {
-                            name: name.clone(),
-                        }),
-                    )?;
-                }
-                OneshotOutcome::Failed { code } => {
-                    shutdown::send_display(
-                        display_tx,
-                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Exited {
-                            name: name.clone(),
-                            code,
-                        }),
-                    )?;
-                    shutdown::kill_all(&cmd_senders);
-                    return Ok(StartupResult::CrashedDuringStartup {
-                        code: 1,
-                        failed_name: name.clone(),
-                    });
-                }
-                OneshotOutcome::OtherCrashed {
-                    crashed_name,
-                    code,
-                    stderr_lines,
-                } => {
-                    return handle_crash_during_startup(
-                        &crashed_name,
-                        code,
-                        &stderr_lines,
-                        &cmd_senders,
-                        display_tx,
-                    );
-                }
+            if let Some(result) =
+                handle_oneshot(name, &cmd_senders, &mut event_rx, &channels.notify).await?
+            {
+                return Ok(result);
             }
         } else {
             cmd_senders.push((name.clone(), cmd_tx));
 
             if proc_def.health.is_some() {
-                shutdown::send_display(
-                    display_tx,
-                    message::DisplayMsg::Lifecycle(message::LifecycleMsg::WaitingHealth {
-                        name: name.clone(),
-                    }),
+                shutdown::send_event(
+                    &channels.notify,
+                    message::Event::WaitingHealth { name: name.clone() },
                 )?;
             }
 
-            match start_service(name, proc_def, &cmd_senders, &mut event_rx, display_tx).await? {
+            match start_service(
+                name,
+                proc_def,
+                &cmd_senders,
+                &mut event_rx,
+                &channels.notify,
+            )
+            .await?
+            {
                 ServiceOutcome::Ready => {}
                 ServiceOutcome::CrashedDuringStartup { code, failed_name } => {
                     return Ok(StartupResult::CrashedDuringStartup { code, failed_name });
@@ -213,18 +193,70 @@ pub async fn start_all(
     Ok(StartupResult::Ready(cmd_senders, event_rx))
 }
 
+async fn handle_oneshot(
+    name: &str,
+    cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)],
+    event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
+    notify_tx: &mpsc::UnboundedSender<message::Event>,
+) -> Result<Option<StartupResult>, Error> {
+    shutdown::send_event(
+        notify_tx,
+        message::Event::WaitingCompletion {
+            name: name.to_string(),
+        },
+    )?;
+    match start_oneshot(name, cmd_senders, event_rx, notify_tx).await? {
+        OneshotOutcome::Completed => {
+            shutdown::send_event(
+                notify_tx,
+                message::Event::Completed {
+                    name: name.to_string(),
+                },
+            )?;
+            Ok(None)
+        }
+        OneshotOutcome::Failed { code } => {
+            shutdown::send_event(
+                notify_tx,
+                message::Event::Exited {
+                    name: name.to_string(),
+                    code,
+                    stderr_lines: vec![],
+                },
+            )?;
+            shutdown::kill_all(cmd_senders);
+            Ok(Some(StartupResult::CrashedDuringStartup {
+                code: 1,
+                failed_name: name.to_string(),
+            }))
+        }
+        OneshotOutcome::OtherCrashed {
+            crashed_name,
+            code,
+            stderr_lines,
+        } => {
+            let result = handle_crash_during_startup(
+                &crashed_name,
+                code,
+                &stderr_lines,
+                cmd_senders,
+                notify_tx,
+            )?;
+            Ok(Some(result))
+        }
+    }
+}
+
 async fn start_oneshot(
     name: &str,
     cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)],
     event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    notify_tx: &mpsc::UnboundedSender<message::Event>,
 ) -> Result<OneshotOutcome, Error> {
     loop {
         let event = event_rx.recv().await.ok_or(Error::EventChannelClosed)?;
 
         match event {
-            message::Event::Healthy { name: event_name } if event_name == name => {}
-            message::Event::Healthy { .. } => {}
             message::Event::Exited {
                 name: event_name,
                 code,
@@ -246,12 +278,12 @@ async fn start_oneshot(
                 name: event_name,
                 reason,
             } => {
-                shutdown::send_display(
-                    display_tx,
-                    message::DisplayMsg::Lifecycle(message::LifecycleMsg::HealthFailed {
+                shutdown::send_event(
+                    notify_tx,
+                    message::Event::HealthFailed {
                         name: event_name.clone(),
                         reason: reason.clone(),
-                    }),
+                    },
                 )?;
                 shutdown::kill_all(cmd_senders);
                 return Err(Error::HealthFailed {
@@ -259,6 +291,13 @@ async fn start_oneshot(
                     reason,
                 });
             }
+            message::Event::Completed { .. }
+            | message::Event::Crashed { .. }
+            | message::Event::Healthy { .. }
+            | message::Event::Killing { .. }
+            | message::Event::Starting { .. }
+            | message::Event::WaitingCompletion { .. }
+            | message::Event::WaitingHealth { .. } => {}
         }
     }
 }
@@ -268,7 +307,7 @@ async fn start_service(
     proc_def: &config::ProcessDef,
     cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)],
     event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    notify_tx: &mpsc::UnboundedSender<message::Event>,
 ) -> Result<ServiceOutcome, Error> {
     loop {
         let event = event_rx.recv().await.ok_or(Error::EventChannelClosed)?;
@@ -276,11 +315,11 @@ async fn start_service(
         match &event {
             message::Event::Healthy { name: event_name } if event_name == name => {
                 if proc_def.health.is_some() {
-                    shutdown::send_display(
-                        display_tx,
-                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Healthy {
+                    shutdown::send_event(
+                        notify_tx,
+                        message::Event::Healthy {
                             name: name.to_string(),
-                        }),
+                        },
                     )?;
                 }
                 return Ok(ServiceOutcome::Ready);
@@ -289,12 +328,12 @@ async fn start_service(
                 name: event_name,
                 reason,
             } => {
-                shutdown::send_display(
-                    display_tx,
-                    message::DisplayMsg::Lifecycle(message::LifecycleMsg::HealthFailed {
+                shutdown::send_event(
+                    notify_tx,
+                    message::Event::HealthFailed {
                         name: event_name.clone(),
                         reason: reason.clone(),
-                    }),
+                    },
                 )?;
                 shutdown::kill_all(cmd_senders);
                 return Err(Error::HealthFailed {
@@ -307,12 +346,13 @@ async fn start_service(
                 code,
                 stderr_lines,
             } if event_name != name => {
-                shutdown::send_display(
-                    display_tx,
-                    message::DisplayMsg::Lifecycle(message::LifecycleMsg::Crashed {
+                shutdown::send_event(
+                    notify_tx,
+                    message::Event::Crashed {
                         name: event_name.clone(),
                         code: *code,
-                    }),
+                        stderr_lines: stderr_lines.clone(),
+                    },
                 )?;
                 let remaining: Vec<String> = cmd_senders
                     .iter()
@@ -322,24 +362,22 @@ async fn start_service(
                 shutdown::emit_killing_all(
                     &remaining,
                     &format!("{event_name} crashed"),
-                    display_tx,
+                    notify_tx,
                 )?;
-                if !stderr_lines.is_empty() {
-                    shutdown::send_display(
-                        display_tx,
-                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Summary {
-                            name: event_name.clone(),
-                            stderr_lines: stderr_lines.clone(),
-                        }),
-                    )?;
-                }
                 shutdown::kill_all(cmd_senders);
                 return Ok(ServiceOutcome::CrashedDuringStartup {
                     code: 1,
                     failed_name: event_name.clone(),
                 });
             }
-            message::Event::Exited { .. } | message::Event::Healthy { .. } => {}
+            message::Event::Completed { .. }
+            | message::Event::Crashed { .. }
+            | message::Event::Exited { .. }
+            | message::Event::Healthy { .. }
+            | message::Event::Killing { .. }
+            | message::Event::Starting { .. }
+            | message::Event::WaitingCompletion { .. }
+            | message::Event::WaitingHealth { .. } => {}
         }
     }
 }
@@ -351,7 +389,7 @@ fn spawn_process_actor(
     env: &std::collections::BTreeMap<String, String>,
     network: Option<&str>,
     event_tx: &mpsc::UnboundedSender<message::Event>,
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    output_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
         let image = docker_image_tag(name, docker_config);
@@ -367,7 +405,7 @@ fn spawn_process_actor(
             stop_timeout_secs: docker_config.stop_timeout_secs,
             volumes: &docker_config.volumes,
         };
-        let cmd_tx = docker_actor::spawn_actor(&run_config, event_tx.clone(), display_tx.clone())?;
+        let cmd_tx = docker_actor::spawn_actor(&run_config, event_tx.clone(), output_tx.clone())?;
         Ok(cmd_tx)
     } else {
         let Some(command) = &proc_def.command else {
@@ -382,7 +420,7 @@ fn spawn_process_actor(
             env,
             proc_def.health.as_ref(),
             event_tx.clone(),
-            display_tx.clone(),
+            output_tx.clone(),
         )?;
         Ok(cmd_tx)
     }
@@ -400,30 +438,22 @@ fn handle_crash_during_startup(
     code: u8,
     stderr_lines: &[String],
     cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)],
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    notify_tx: &mpsc::UnboundedSender<message::Event>,
 ) -> Result<StartupResult, Error> {
-    shutdown::send_display(
-        display_tx,
-        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Crashed {
+    shutdown::send_event(
+        notify_tx,
+        message::Event::Crashed {
             name: crashed_name.to_string(),
             code,
-        }),
+            stderr_lines: stderr_lines.to_vec(),
+        },
     )?;
     let remaining: Vec<String> = cmd_senders
         .iter()
         .map(|(nm, _)| nm.clone())
         .filter(|nm| nm != crashed_name)
         .collect();
-    shutdown::emit_killing_all(&remaining, &format!("{crashed_name} crashed"), display_tx)?;
-    if !stderr_lines.is_empty() {
-        shutdown::send_display(
-            display_tx,
-            message::DisplayMsg::Lifecycle(message::LifecycleMsg::Summary {
-                name: crashed_name.to_string(),
-                stderr_lines: stderr_lines.to_vec(),
-            }),
-        )?;
-    }
+    shutdown::emit_killing_all(&remaining, &format!("{crashed_name} crashed"), notify_tx)?;
     shutdown::kill_all(cmd_senders);
     Ok(StartupResult::CrashedDuringStartup {
         code: 1,

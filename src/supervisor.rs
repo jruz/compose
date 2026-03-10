@@ -52,6 +52,18 @@ pub async fn run(
 
     let (event_tx, event_rx) = mpsc::unbounded_channel::<message::Event>();
     let (display_tx, display_rx) = mpsc::unbounded_channel::<message::DisplayMsg>();
+    let (notify_tx, mut notify_rx) = mpsc::unbounded_channel::<message::Event>();
+
+    let translator_tx = display_tx.clone();
+    let _translator_handle = tokio::spawn(async move {
+        while let Some(event) = notify_rx.recv().await {
+            for msg in event_to_display(&event) {
+                if let Err(_send_err) = translator_tx.send(msg) {
+                    break;
+                }
+            }
+        }
+    });
 
     let _formatter_handle = formatter::spawn_task(&names, display_rx, log_tx)?;
 
@@ -86,12 +98,17 @@ pub async fn run(
 
     let global_env = env::load_global(global_env_file.as_deref())?;
 
+    let startup_channels = startup::Channels {
+        events: event_tx.clone(),
+        notify: notify_tx.clone(),
+        output: display_tx.clone(),
+    };
+
     let result = match startup::start_all(
         &config,
         &start_order,
         &global_env,
-        &event_tx,
-        &display_tx,
+        &startup_channels,
         event_rx,
         network_name.as_deref(),
     )
@@ -107,7 +124,7 @@ pub async fn run(
             let all_names: Vec<String> =
                 cmd_senders.iter().map(|(name, _tx)| name.clone()).collect();
             drop(event_tx);
-            lifecycle::manage(cmd_senders, &all_names, shutdown, &display_tx, lifecycle_rx)
+            lifecycle::manage(cmd_senders, &all_names, shutdown, &notify_tx, lifecycle_rx)
                 .await
                 .map_err(Error::from)
         }
@@ -129,6 +146,68 @@ pub async fn run(
     }
 
     result
+}
+
+fn event_to_display(event: &message::Event) -> Vec<message::DisplayMsg> {
+    match event {
+        message::Event::Completed { name } => vec![message::DisplayMsg::Lifecycle(
+            message::LifecycleMsg::Completed { name: name.clone() },
+        )],
+        message::Event::Crashed {
+            name,
+            code,
+            stderr_lines,
+        } => {
+            let mut msgs = vec![message::DisplayMsg::Lifecycle(
+                message::LifecycleMsg::Crashed {
+                    name: name.clone(),
+                    code: *code,
+                },
+            )];
+            if !stderr_lines.is_empty() {
+                msgs.push(message::DisplayMsg::Lifecycle(
+                    message::LifecycleMsg::Summary {
+                        name: name.clone(),
+                        stderr_lines: stderr_lines.clone(),
+                    },
+                ));
+            }
+            msgs
+        }
+        message::Event::Exited { name, code, .. } => vec![message::DisplayMsg::Lifecycle(
+            message::LifecycleMsg::Exited {
+                name: name.clone(),
+                code: *code,
+            },
+        )],
+        message::Event::HealthFailed { name, reason } => vec![message::DisplayMsg::Lifecycle(
+            message::LifecycleMsg::HealthFailed {
+                name: name.clone(),
+                reason: reason.clone(),
+            },
+        )],
+        message::Event::Healthy { name } => vec![message::DisplayMsg::Lifecycle(
+            message::LifecycleMsg::Healthy { name: name.clone() },
+        )],
+        message::Event::Killing { name, reason } => vec![message::DisplayMsg::Lifecycle(
+            message::LifecycleMsg::Killing {
+                name: name.clone(),
+                reason: reason.clone(),
+            },
+        )],
+        message::Event::Starting { name, command } => vec![message::DisplayMsg::Lifecycle(
+            message::LifecycleMsg::Starting {
+                name: name.clone(),
+                command: command.clone(),
+            },
+        )],
+        message::Event::WaitingCompletion { name } => vec![message::DisplayMsg::Lifecycle(
+            message::LifecycleMsg::WaitingCompletion { name: name.clone() },
+        )],
+        message::Event::WaitingHealth { name } => vec![message::DisplayMsg::Lifecycle(
+            message::LifecycleMsg::WaitingHealth { name: name.clone() },
+        )],
+    }
 }
 
 async fn cleanup_docker(
