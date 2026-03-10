@@ -49,30 +49,54 @@ pub fn spawn_actor(
         ports: run.ports,
         volumes: run.volumes,
     };
-    let mut cmd = docker::run_command(&docker_run);
-    let mut child = crate::process::spawn_child(&mut cmd).map_err(|source| Error::Spawn {
-        name: run.name.to_string(),
-        source,
-    })?;
+    let mut docker_cmd = docker::run_command(&docker_run);
+    let mut spawned =
+        crate::process::spawn_child(&mut docker_cmd).map_err(|source| Error::Spawn {
+            name: run.name.to_string(),
+            source,
+        })?;
 
-    let drain = actor::setup_output_drain(run.name, &mut child, display_tx);
+    let drain = actor::setup_output_drain(run.name, &mut spawned, display_tx);
     let health_config = run.health.map(actor::parse_health_config);
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-    let backend = actor::Backend::Docker {
-        container,
-        stop_timeout_secs: run.stop_timeout_secs,
-    };
+    let stop_timeout_secs = run.stop_timeout_secs;
+    let container_for_kill = container.clone();
+    let container_for_health = container;
+
     let actor_name = run.name.to_string();
+    let channels = actor::ActorChannels { cmd_rx, event_tx };
     tokio::spawn(actor::actor_loop(
-        backend,
         actor_name,
-        child,
-        cmd_rx,
-        event_tx,
+        spawned,
+        channels,
         health_config,
         drain,
+        move |_proc_child| {
+            let kill_container = container_for_kill.clone();
+            Box::pin(async move {
+                if let Err(_stop_err) = docker::stop(&kill_container, stop_timeout_secs).await {}
+            })
+        },
+        move |health_cmd| {
+            let health_container = container_for_health.clone();
+            Box::pin(async move {
+                run_docker_health(&health_container, health_cmd)
+                    .await
+                    .map_err(|err| err.to_string())
+            })
+        },
     ));
 
     Ok(cmd_tx)
+}
+
+async fn run_docker_health(
+    container: &str,
+    cmd: &actor::HealthCommand,
+) -> Result<std::process::Output, docker::Error> {
+    match cmd {
+        actor::HealthCommand::Shell(shell_cmd) => docker::exec_shell(container, shell_cmd).await,
+        actor::HealthCommand::Exec(args) => docker::exec_check(container, args).await,
+    }
 }
