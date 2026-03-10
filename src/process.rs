@@ -35,27 +35,55 @@ pub fn spawn_actor(
         cmd.env(key, value);
     }
 
-    let mut child = spawn_child(&mut cmd).map_err(|source| Error::Spawn {
+    let mut spawned = spawn_child(&mut cmd).map_err(|source| Error::Spawn {
         name: name.to_string(),
         source,
     })?;
 
-    let drain = actor::setup_output_drain(name, &mut child, display_tx);
+    let drain = actor::setup_output_drain(name, &mut spawned, display_tx);
     let health_config = health.map(actor::parse_health_config);
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
     let actor_name = name.to_string();
+    let channels = actor::ActorChannels { cmd_rx, event_tx };
     tokio::spawn(actor::actor_loop(
-        actor::Backend::Exec,
         actor_name,
-        child,
-        cmd_rx,
-        event_tx,
+        spawned,
+        channels,
         health_config,
         drain,
+        |proc_child| Box::pin(actor::graceful_kill(proc_child)),
+        |health_cmd| {
+            Box::pin(async move {
+                run_exec_health(health_cmd)
+                    .await
+                    .map_err(|err| err.to_string())
+            })
+        },
     ));
 
     Ok(cmd_tx)
+}
+
+async fn run_exec_health(cmd: &actor::HealthCommand) -> std::io::Result<std::process::Output> {
+    match cmd {
+        actor::HealthCommand::Shell(shell_cmd) => {
+            tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg(shell_cmd)
+                .output()
+                .await
+        }
+        actor::HealthCommand::Exec(args) => {
+            let (program, rest) = args.split_first().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "exec args empty")
+            })?;
+            tokio::process::Command::new(program)
+                .args(rest)
+                .output()
+                .await
+        }
+    }
 }
 
 pub fn spawn_child(
