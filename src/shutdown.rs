@@ -22,10 +22,10 @@ pub fn emit_killing_all(
     for name in names {
         send_display(
             display_tx,
-            message::DisplayMsg::Killing {
+            message::DisplayMsg::Lifecycle(message::LifecycleMsg::Killing {
                 name: name.clone(),
                 reason: reason.to_string(),
-            },
+            }),
         )?;
     }
     Ok(())

@@ -134,10 +134,10 @@ pub async fn start_all(
 
         shutdown::send_display(
             display_tx,
-            message::DisplayMsg::Starting {
+            message::DisplayMsg::Lifecycle(message::LifecycleMsg::Starting {
                 name: name.clone(),
                 command: start_label,
-            },
+            }),
         )?;
 
         let env = env::resolve(global_env, proc_def)?;
@@ -148,22 +148,26 @@ pub async fn start_all(
         if is_oneshot {
             shutdown::send_display(
                 display_tx,
-                message::DisplayMsg::WaitingCompletion { name: name.clone() },
+                message::DisplayMsg::Lifecycle(message::LifecycleMsg::WaitingCompletion {
+                    name: name.clone(),
+                }),
             )?;
             match start_oneshot(name, &cmd_senders, &mut event_rx, display_tx).await? {
                 OneshotOutcome::Completed => {
                     shutdown::send_display(
                         display_tx,
-                        message::DisplayMsg::Completed { name: name.clone() },
+                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Completed {
+                            name: name.clone(),
+                        }),
                     )?;
                 }
                 OneshotOutcome::Failed { code } => {
                     shutdown::send_display(
                         display_tx,
-                        message::DisplayMsg::Exited {
+                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Exited {
                             name: name.clone(),
                             code,
-                        },
+                        }),
                     )?;
                     shutdown::kill_all(&cmd_senders);
                     return Ok(StartupResult::CrashedDuringStartup {
@@ -191,7 +195,9 @@ pub async fn start_all(
             if proc_def.health.is_some() {
                 shutdown::send_display(
                     display_tx,
-                    message::DisplayMsg::WaitingHealth { name: name.clone() },
+                    message::DisplayMsg::Lifecycle(message::LifecycleMsg::WaitingHealth {
+                        name: name.clone(),
+                    }),
                 )?;
             }
 
@@ -242,10 +248,10 @@ async fn start_oneshot(
             } => {
                 shutdown::send_display(
                     display_tx,
-                    message::DisplayMsg::HealthFailed {
+                    message::DisplayMsg::Lifecycle(message::LifecycleMsg::HealthFailed {
                         name: event_name.clone(),
                         reason: reason.clone(),
-                    },
+                    }),
                 )?;
                 shutdown::kill_all(cmd_senders);
                 return Err(Error::HealthFailed {
@@ -272,9 +278,9 @@ async fn start_service(
                 if proc_def.health.is_some() {
                     shutdown::send_display(
                         display_tx,
-                        message::DisplayMsg::Healthy {
+                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Healthy {
                             name: name.to_string(),
-                        },
+                        }),
                     )?;
                 }
                 return Ok(ServiceOutcome::Ready);
@@ -285,10 +291,10 @@ async fn start_service(
             } => {
                 shutdown::send_display(
                     display_tx,
-                    message::DisplayMsg::HealthFailed {
+                    message::DisplayMsg::Lifecycle(message::LifecycleMsg::HealthFailed {
                         name: event_name.clone(),
                         reason: reason.clone(),
-                    },
+                    }),
                 )?;
                 shutdown::kill_all(cmd_senders);
                 return Err(Error::HealthFailed {
@@ -303,10 +309,10 @@ async fn start_service(
             } if event_name != name => {
                 shutdown::send_display(
                     display_tx,
-                    message::DisplayMsg::Crashed {
+                    message::DisplayMsg::Lifecycle(message::LifecycleMsg::Crashed {
                         name: event_name.clone(),
                         code: *code,
-                    },
+                    }),
                 )?;
                 let remaining: Vec<String> = cmd_senders
                     .iter()
@@ -321,10 +327,10 @@ async fn start_service(
                 if !stderr_lines.is_empty() {
                     shutdown::send_display(
                         display_tx,
-                        message::DisplayMsg::Summary {
+                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Summary {
                             name: event_name.clone(),
                             stderr_lines: stderr_lines.clone(),
-                        },
+                        }),
                     )?;
                 }
                 shutdown::kill_all(cmd_senders);
@@ -398,10 +404,10 @@ fn handle_crash_during_startup(
 ) -> Result<StartupResult, Error> {
     shutdown::send_display(
         display_tx,
-        message::DisplayMsg::Crashed {
+        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Crashed {
             name: crashed_name.to_string(),
             code,
-        },
+        }),
     )?;
     let remaining: Vec<String> = cmd_senders
         .iter()
@@ -412,10 +418,10 @@ fn handle_crash_during_startup(
     if !stderr_lines.is_empty() {
         shutdown::send_display(
             display_tx,
-            message::DisplayMsg::Summary {
+            message::DisplayMsg::Lifecycle(message::LifecycleMsg::Summary {
                 name: crashed_name.to_string(),
                 stderr_lines: stderr_lines.to_vec(),
-            },
+            }),
         )?;
     }
     shutdown::kill_all(cmd_senders);
