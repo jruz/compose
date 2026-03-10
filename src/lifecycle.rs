@@ -72,10 +72,10 @@ fn handle_event(
                 ShutdownStrategy::MainProcess(main_name) if *main_name == name => {
                     shutdown::send_display(
                         display_tx,
-                        message::DisplayMsg::Exited {
+                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Exited {
                             name: name.clone(),
                             code,
-                        },
+                        }),
                     )?;
                     shutdown::emit_killing_all(&remaining, &format!("{name} exited"), display_tx)?;
                     shutdown::kill_all(cmd_senders);
@@ -86,19 +86,19 @@ fn handle_event(
                     let reason = format!("{name} crashed");
                     shutdown::send_display(
                         display_tx,
-                        message::DisplayMsg::Crashed {
+                        message::DisplayMsg::Lifecycle(message::LifecycleMsg::Crashed {
                             name: name.clone(),
                             code,
-                        },
+                        }),
                     )?;
                     shutdown::emit_killing_all(&remaining, &reason, display_tx)?;
                     if !stderr_lines.is_empty() {
                         shutdown::send_display(
                             display_tx,
-                            message::DisplayMsg::Summary {
+                            message::DisplayMsg::Lifecycle(message::LifecycleMsg::Summary {
                                 name: name.clone(),
                                 stderr_lines,
-                            },
+                            }),
                         )?;
                     }
                     shutdown::kill_all(cmd_senders);
@@ -116,10 +116,10 @@ fn handle_event(
         message::Event::HealthFailed { name, reason } => {
             shutdown::send_display(
                 display_tx,
-                message::DisplayMsg::HealthFailed {
+                message::DisplayMsg::Lifecycle(message::LifecycleMsg::HealthFailed {
                     name: name.clone(),
                     reason: reason.clone(),
-                },
+                }),
             )?;
             shutdown::emit_killing_all(all_names, &format!("{name} health failed"), display_tx)?;
             shutdown::kill_all(cmd_senders);

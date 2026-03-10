@@ -73,9 +73,9 @@ pub async fn run(
         let net = generate_network_name(project_name.as_deref());
         send_display(
             &display_tx,
-            message::DisplayMsg::CreatingNetwork {
+            message::DisplayMsg::Docker(message::DockerMsg::CreatingNetwork {
                 name: "docker".to_string(),
-            },
+            }),
         )?;
         docker::network_create(&net).await?;
         build_images(&config, &start_order, &display_tx).await?;
@@ -139,19 +139,19 @@ async fn cleanup_docker(
     if !docker_names.is_empty() {
         if let Err(_send_err) = send_display(
             display_tx,
-            message::DisplayMsg::RemovingContainers {
+            message::DisplayMsg::Docker(message::DockerMsg::RemovingContainers {
                 name: "docker".to_string(),
-            },
+            }),
         ) {}
         for name in docker_names {
             let container = docker::container_name(network, name);
             if let Err(rm_err) = docker::rm(&container).await
                 && let Err(_send_err) = send_display(
                     display_tx,
-                    message::DisplayMsg::CleanupError {
+                    message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
                         name: "docker".to_string(),
                         reason: rm_err.to_string(),
-                    },
+                    }),
                 )
             {}
         }
@@ -159,17 +159,17 @@ async fn cleanup_docker(
 
     if let Err(_send_err) = send_display(
         display_tx,
-        message::DisplayMsg::RemovingNetwork {
+        message::DisplayMsg::Docker(message::DockerMsg::RemovingNetwork {
             name: "docker".to_string(),
-        },
+        }),
     ) {}
     if let Err(rm_err) = docker::network_rm(network).await
         && let Err(_send_err) = send_display(
             display_tx,
-            message::DisplayMsg::CleanupError {
+            message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
                 name: "docker".to_string(),
                 reason: rm_err.to_string(),
-            },
+            }),
         )
     {}
 }
@@ -192,7 +192,7 @@ async fn build_images(
 
         send_display(
             display_tx,
-            message::DisplayMsg::Building { name: name.clone() },
+            message::DisplayMsg::Docker(message::DockerMsg::Building { name: name.clone() }),
         )?;
 
         let tag = match &docker_config.image {
@@ -252,7 +252,7 @@ async fn build_images(
 
         send_display(
             display_tx,
-            message::DisplayMsg::Built { name: name.clone() },
+            message::DisplayMsg::Docker(message::DockerMsg::Built { name: name.clone() }),
         )?;
     }
 
