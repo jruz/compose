@@ -76,32 +76,48 @@ fn render(styles: &[(String, Style)], msg: &message::DisplayMsg) -> Result<Strin
     let tag = make_tag(name, style);
 
     let line = match msg {
-        message::DisplayMsg::Building { .. } => format!("{tag} building"),
-        message::DisplayMsg::Built { .. } => format!("{tag} built"),
-        message::DisplayMsg::CleanupError { reason, .. } => {
-            format!("{tag} cleanup error: {reason}")
-        }
-        message::DisplayMsg::Completed { .. } => format!("{tag} completed"),
-        message::DisplayMsg::Crashed { code, .. } => {
-            format!("{tag} crashed with code {code}")
-        }
-        message::DisplayMsg::CreatingNetwork { .. } => format!("{tag} creating network"),
-        message::DisplayMsg::Exited { code, .. } => format!("{tag} exited with code {code}"),
-        message::DisplayMsg::HealthFailed { reason, .. } => {
-            format!("{tag} {reason}")
-        }
-        message::DisplayMsg::Healthy { .. } => format!("{tag} healthy"),
-        message::DisplayMsg::Killing { reason, .. } => format!("{tag} killing ({reason})"),
-        message::DisplayMsg::Output { line, .. } => format!("{tag} {line}"),
-        message::DisplayMsg::RemovingContainers { .. } => format!("{tag} removing containers"),
-        message::DisplayMsg::RemovingNetwork { .. } => format!("{tag} removing network"),
-        message::DisplayMsg::Starting { command, .. } => format!("{tag} starting: {command}"),
-        message::DisplayMsg::Summary { stderr_lines, .. } => render_summary(&tag, stderr_lines),
-        message::DisplayMsg::WaitingCompletion { .. } => {
-            format!("{tag} waiting for completion")
-        }
-        message::DisplayMsg::WaitingHealth { .. } => {
-            format!("{tag} waiting for health check...")
+        message::DisplayMsg::Docker(docker) => match docker {
+            message::DockerMsg::Building { .. } => format!("{tag} building"),
+            message::DockerMsg::Built { .. } => format!("{tag} built"),
+            message::DockerMsg::CleanupError { reason, .. } => {
+                format!("{tag} cleanup error: {reason}")
+            }
+            message::DockerMsg::CreatingNetwork { .. } => format!("{tag} creating network"),
+            message::DockerMsg::RemovingContainers { .. } => {
+                format!("{tag} removing containers")
+            }
+            message::DockerMsg::RemovingNetwork { .. } => format!("{tag} removing network"),
+        },
+        message::DisplayMsg::Lifecycle(lifecycle) => match lifecycle {
+            message::LifecycleMsg::Completed { .. } => format!("{tag} completed"),
+            message::LifecycleMsg::Crashed { code, .. } => {
+                format!("{tag} crashed with code {code}")
+            }
+            message::LifecycleMsg::Exited { code, .. } => {
+                format!("{tag} exited with code {code}")
+            }
+            message::LifecycleMsg::HealthFailed { reason, .. } => {
+                format!("{tag} {reason}")
+            }
+            message::LifecycleMsg::Healthy { .. } => format!("{tag} healthy"),
+            message::LifecycleMsg::Killing { reason, .. } => {
+                format!("{tag} killing ({reason})")
+            }
+            message::LifecycleMsg::Starting { command, .. } => {
+                format!("{tag} starting: {command}")
+            }
+            message::LifecycleMsg::Summary { stderr_lines, .. } => {
+                render_summary(&tag, stderr_lines)
+            }
+            message::LifecycleMsg::WaitingCompletion { .. } => {
+                format!("{tag} waiting for completion")
+            }
+            message::LifecycleMsg::WaitingHealth { .. } => {
+                format!("{tag} waiting for health check...")
+            }
+        },
+        message::DisplayMsg::Output(message::OutputMsg::Line { line, .. }) => {
+            format!("{tag} {line}")
         }
     };
     Ok(line)
