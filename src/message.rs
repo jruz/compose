@@ -1,5 +1,13 @@
 #[derive(Debug)]
 pub enum Event {
+    Completed {
+        name: String,
+    },
+    Crashed {
+        name: String,
+        code: u8,
+        stderr_lines: Vec<String>,
+    },
     Exited {
         name: String,
         code: u8,
@@ -10,6 +18,20 @@ pub enum Event {
         reason: String,
     },
     Healthy {
+        name: String,
+    },
+    Killing {
+        name: String,
+        reason: String,
+    },
+    Starting {
+        name: String,
+        command: String,
+    },
+    WaitingCompletion {
+        name: String,
+    },
+    WaitingHealth {
         name: String,
     },
 }
