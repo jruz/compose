@@ -41,10 +41,7 @@ pub async fn run(
     log_tx: mpsc::UnboundedSender<String>,
 ) -> Result<message::ExitResult, Error> {
     let has_docker = config.processes.values().any(|proc| proc.docker.is_some());
-    let mut names: Vec<String> = config.processes.keys().cloned().collect();
-    if has_docker {
-        names.push("docker".to_string());
-    }
+    let names = display_names(&config, has_docker);
 
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     let (display_tx, display_rx) = mpsc::unbounded_channel();
@@ -69,7 +66,7 @@ pub async fn run(
         notify: notify_tx.clone(),
         output: display_tx.clone(),
     };
-    let result = match startup::start_all(
+    let startup_result = startup::start_all(
         &config,
         &start_order,
         &global_env,
@@ -77,8 +74,34 @@ pub async fn run(
         &mut event_rx,
         network_name.as_deref(),
     )
-    .await?
-    {
+    .await?;
+    let result = run_lifecycle(startup_result, event_tx, shutdown, &notify_tx, event_rx).await;
+
+    if let Some(net) = &network_name {
+        docker_infra::cleanup(&config, &start_order, net, &display_tx).await;
+    }
+    drop(notify_tx);
+    drop(channels);
+    drop(translator_handle.await);
+    result
+}
+
+fn display_names(config: &config::Config, has_docker: bool) -> Vec<String> {
+    let mut names: Vec<String> = config.processes.keys().cloned().collect();
+    if has_docker {
+        names.push("docker".to_string());
+    }
+    names
+}
+
+async fn run_lifecycle(
+    startup_result: startup::StartupResult,
+    event_tx: mpsc::UnboundedSender<message::Event>,
+    shutdown: lifecycle::ShutdownStrategy,
+    notify_tx: &mpsc::UnboundedSender<message::Event>,
+    event_rx: mpsc::UnboundedReceiver<message::Event>,
+) -> Result<message::ExitResult, Error> {
+    match startup_result {
         startup::StartupResult::CrashedDuringStartup { code, failed_name } => {
             Ok(message::ExitResult {
                 code,
@@ -89,19 +112,11 @@ pub async fn run(
             let all_names: Vec<String> =
                 cmd_senders.iter().map(|(name, _tx)| name.clone()).collect();
             drop(event_tx);
-            lifecycle::manage(cmd_senders, &all_names, shutdown, &notify_tx, event_rx)
+            lifecycle::manage(cmd_senders, &all_names, shutdown, notify_tx, event_rx)
                 .await
                 .map_err(Error::from)
         }
-    };
-
-    if let Some(net) = &network_name {
-        docker_infra::cleanup(&config, &start_order, net, &display_tx).await;
     }
-    drop(notify_tx);
-    drop(channels);
-    drop(translator_handle.await);
-    result
 }
 
 fn resolve_shutdown(
