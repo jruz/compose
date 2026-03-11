@@ -46,6 +46,34 @@ fn interpolate(env: &mut BTreeMap<String, String>) -> Result<(), Error> {
     Ok(())
 }
 
+pub fn expand_vars(value: &str, env: &BTreeMap<String, String>) -> String {
+    let mut result = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '$' && chars.peek() == Some(&'{') {
+            chars.next();
+            let var_name: String = chars
+                .by_ref()
+                .take_while(|&closing| closing != '}')
+                .collect();
+            if let Some(resolved) = env.get(&var_name) {
+                result.push_str(resolved);
+            } else if let Ok(host_val) = std::env::var(&var_name) {
+                result.push_str(&host_val);
+            } else {
+                result.push_str("${");
+                result.push_str(&var_name);
+                result.push('}');
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
 fn interpolate_value(key: &str, value: &str, env: &BTreeMap<String, String>) -> String {
     let mut result = String::with_capacity(value.len());
     let mut chars = value.chars().peekable();

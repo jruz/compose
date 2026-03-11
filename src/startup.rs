@@ -379,6 +379,11 @@ fn spawn_process_actor(
 ) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
         let image = docker_image_tag(name, docker_config);
+        let volumes: Vec<String> = docker_config
+            .volumes
+            .iter()
+            .map(|vol| env::expand_vars(vol, env))
+            .collect();
         let run_config = docker_actor::RunConfig {
             command: proc_def.command.as_deref(),
             env,
@@ -389,7 +394,7 @@ fn spawn_process_actor(
             network: net,
             ports: &docker_config.ports,
             stop_timeout_secs: docker_config.stop_timeout_secs,
-            volumes: &docker_config.volumes,
+            volumes: &volumes,
         };
         let cmd_tx = docker_actor::spawn_actor(&run_config, event_tx.clone(), output_tx.clone())?;
         Ok(cmd_tx)
