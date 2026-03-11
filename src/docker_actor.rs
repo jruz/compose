@@ -60,43 +60,20 @@ pub fn spawn_actor(
     let health_config = run.health.map(actor::parse_health_config);
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-    let stop_timeout_secs = run.stop_timeout_secs;
-    let container_for_kill = container.clone();
-    let container_for_health = container;
-
     let actor_name = run.name.to_string();
     let channels = actor::ActorChannels { cmd_rx, event_tx };
+    let driver = actor::Driver::Docker {
+        container,
+        stop_timeout_secs: run.stop_timeout_secs,
+    };
     tokio::spawn(actor::actor_loop(
         actor_name,
         spawned,
         channels,
         health_config,
         drain,
-        move |_proc_child| {
-            let kill_container = container_for_kill.clone();
-            Box::pin(async move {
-                if let Err(_stop_err) = docker::stop(&kill_container, stop_timeout_secs).await {}
-            })
-        },
-        move |health_cmd| {
-            let health_container = container_for_health.clone();
-            Box::pin(async move {
-                run_docker_health(&health_container, health_cmd)
-                    .await
-                    .map_err(|err| err.to_string())
-            })
-        },
+        driver,
     ));
 
     Ok(cmd_tx)
-}
-
-async fn run_docker_health(
-    container: &str,
-    cmd: &actor::HealthCommand,
-) -> Result<std::process::Output, docker::Error> {
-    match cmd {
-        actor::HealthCommand::Shell(shell_cmd) => docker::exec_shell(container, shell_cmd).await,
-        actor::HealthCommand::Exec(args) => docker::exec_check(container, args).await,
-    }
 }
