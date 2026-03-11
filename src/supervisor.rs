@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
-use crate::build_actor;
 use crate::cli;
 use crate::config;
-use crate::docker;
+use crate::docker_infra;
 use crate::env;
 use crate::formatter;
 use crate::lifecycle;
@@ -15,13 +15,7 @@ use crate::startup;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
-    Build(#[from] build_actor::Error),
-
-    #[error("display channel closed: {0}")]
-    DisplayChannelClosed(mpsc::error::SendError<message::DisplayMsg>),
-
-    #[error(transparent)]
-    Docker(#[from] docker::Error),
+    DockerInfra(#[from] docker_infra::Error),
 
     #[error(transparent)]
     Env(#[from] env::Error),
@@ -52,65 +46,34 @@ pub async fn run(
         names.push("docker".to_string());
     }
 
-    let (event_tx, mut event_rx) = mpsc::unbounded_channel::<message::Event>();
-    let (display_tx, display_rx) = mpsc::unbounded_channel::<message::DisplayMsg>();
-    let (notify_tx, mut notify_rx) = mpsc::unbounded_channel::<message::Event>();
-
-    let translator_tx = display_tx.clone();
-    let translator_handle = tokio::spawn(async move {
-        while let Some(event) = notify_rx.recv().await {
-            for msg in event_to_display(&event) {
-                if let Err(_send_err) = translator_tx.send(msg) {
-                    break;
-                }
-            }
-        }
-    });
-
-    let _formatter_handle = formatter::spawn_task(&names, display_rx, log_tx)?;
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let (display_tx, display_rx) = mpsc::unbounded_channel();
+    let (notify_tx, notify_rx) = mpsc::unbounded_channel();
+    let translator_handle = spawn_translator(notify_rx, display_tx.clone());
+    let _formatter = formatter::spawn_task(&names, display_rx, log_tx)?;
 
     let start_order = startup::resolve_start_order(&config);
-
-    let shutdown = match mode {
-        cli::Command::Run(_) => lifecycle::ShutdownStrategy::MainProcess(
-            start_order
-                .last()
-                .ok_or_else(|| Error::ProcessNotFound {
-                    name: "main".to_string(),
-                })?
-                .clone(),
-        ),
-        cli::Command::Up(_) => lifecycle::ShutdownStrategy::AnyExit,
-    };
-
+    let shutdown = resolve_shutdown(&mode, &start_order)?;
     let network_name = if has_docker {
-        let net = generate_network_name(project_name.as_deref());
-        send_display(
-            &display_tx,
-            message::DisplayMsg::Docker(message::DockerMsg::CreatingNetwork {
-                name: "docker".to_string(),
-            }),
-        )?;
-        docker::network_create(&net).await?;
-        build_actor::build(&config, &start_order, &display_tx).await?;
-        Some(net)
+        Some(
+            docker_infra::setup(&config, &start_order, project_name.as_deref(), &display_tx)
+                .await?,
+        )
     } else {
         None
     };
-
     let global_env = env::load_global(global_env_file.as_deref())?;
 
-    let startup_channels = startup::Channels {
+    let channels = startup::Channels {
         events: event_tx.clone(),
         notify: notify_tx.clone(),
         output: display_tx.clone(),
     };
-
     let result = match startup::start_all(
         &config,
         &start_order,
         &global_env,
-        &startup_channels,
+        &channels,
         &mut event_rx,
         network_name.as_deref(),
     )
@@ -133,25 +96,45 @@ pub async fn run(
     };
 
     if let Some(net) = &network_name {
-        let docker_names: Vec<String> = start_order
-            .iter()
-            .filter(|name| {
-                config
-                    .processes
-                    .get(name.as_str())
-                    .is_some_and(|proc| proc.docker.is_some())
-            })
-            .cloned()
-            .collect();
-
-        cleanup_docker(&docker_names, net, &display_tx).await;
+        docker_infra::cleanup(&config, &start_order, net, &display_tx).await;
     }
-
     drop(notify_tx);
-    drop(startup_channels);
+    drop(channels);
     drop(translator_handle.await);
-
     result
+}
+
+fn resolve_shutdown(
+    mode: &cli::Command,
+    start_order: &[String],
+) -> Result<lifecycle::ShutdownStrategy, Error> {
+    match mode {
+        cli::Command::Run(_) => {
+            let main = start_order
+                .last()
+                .ok_or_else(|| Error::ProcessNotFound {
+                    name: "main".to_string(),
+                })?
+                .clone();
+            Ok(lifecycle::ShutdownStrategy::MainProcess(main))
+        }
+        cli::Command::Up(_) => Ok(lifecycle::ShutdownStrategy::AnyExit),
+    }
+}
+
+fn spawn_translator(
+    mut notify_rx: mpsc::UnboundedReceiver<message::Event>,
+    display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(event) = notify_rx.recv().await {
+            for msg in event_to_display(&event) {
+                if let Err(_send_err) = display_tx.send(msg) {
+                    break;
+                }
+            }
+        }
+    })
 }
 
 fn event_to_display(event: &message::Event) -> Vec<message::DisplayMsg> {
@@ -214,62 +197,4 @@ fn event_to_display(event: &message::Event) -> Vec<message::DisplayMsg> {
             message::LifecycleMsg::WaitingHealth { name: name.clone() },
         )],
     }
-}
-
-async fn cleanup_docker(
-    docker_names: &[String],
-    network: &str,
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-) {
-    if !docker_names.is_empty() {
-        if let Err(_send_err) = send_display(
-            display_tx,
-            message::DisplayMsg::Docker(message::DockerMsg::RemovingContainers {
-                name: "docker".to_string(),
-            }),
-        ) {}
-        for name in docker_names {
-            let container = docker::container_name(network, name);
-            if let Err(rm_err) = docker::rm(&container).await
-                && let Err(_send_err) = send_display(
-                    display_tx,
-                    message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
-                        name: "docker".to_string(),
-                        reason: rm_err.to_string(),
-                    }),
-                )
-            {}
-        }
-    }
-
-    if let Err(_send_err) = send_display(
-        display_tx,
-        message::DisplayMsg::Docker(message::DockerMsg::RemovingNetwork {
-            name: "docker".to_string(),
-        }),
-    ) {}
-    if let Err(rm_err) = docker::network_rm(network).await
-        && let Err(_send_err) = send_display(
-            display_tx,
-            message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
-                name: "docker".to_string(),
-                reason: rm_err.to_string(),
-            }),
-        )
-    {}
-}
-
-fn generate_network_name(project_name: Option<&str>) -> String {
-    let pid = std::process::id();
-    match project_name {
-        Some(name) => format!("compose-{name}-{pid}"),
-        None => format!("compose-{pid}"),
-    }
-}
-
-fn send_display(
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-    msg: message::DisplayMsg,
-) -> Result<(), Error> {
-    display_tx.send(msg).map_err(Error::DisplayChannelClosed)
 }
