@@ -52,38 +52,10 @@ pub fn spawn_actor(
         channels,
         health_config,
         drain,
-        |proc_child| Box::pin(actor::graceful_kill(proc_child)),
-        |health_cmd| {
-            Box::pin(async move {
-                run_exec_health(health_cmd)
-                    .await
-                    .map_err(|err| err.to_string())
-            })
-        },
+        actor::Driver::Exec,
     ));
 
     Ok(cmd_tx)
-}
-
-async fn run_exec_health(cmd: &actor::HealthCommand) -> std::io::Result<std::process::Output> {
-    match cmd {
-        actor::HealthCommand::Shell(shell_cmd) => {
-            tokio::process::Command::new("sh")
-                .arg("-c")
-                .arg(shell_cmd)
-                .output()
-                .await
-        }
-        actor::HealthCommand::Exec(args) => {
-            let (program, rest) = args.split_first().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "exec args empty")
-            })?;
-            tokio::process::Command::new(program)
-                .args(rest)
-                .output()
-                .await
-        }
-    }
 }
 
 pub fn spawn_child(
