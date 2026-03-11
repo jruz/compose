@@ -147,7 +147,9 @@ pub async fn run(
         cleanup_docker(&docker_names, net, &display_tx).await;
     }
 
-    translator_handle.abort();
+    drop(notify_tx);
+    drop(startup_channels);
+    drop(translator_handle.await);
 
     result
 }
