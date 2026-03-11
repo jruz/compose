@@ -43,14 +43,8 @@ pub struct Channels {
 }
 
 pub enum StartupResult {
-    CrashedDuringStartup {
-        code: u8,
-        failed_name: String,
-    },
-    Ready(
-        Vec<(String, mpsc::UnboundedSender<message::Command>)>,
-        mpsc::UnboundedReceiver<message::Event>,
-    ),
+    CrashedDuringStartup { code: u8, failed_name: String },
+    Ready(Vec<(String, mpsc::UnboundedSender<message::Command>)>),
 }
 
 enum OneshotOutcome {
@@ -110,7 +104,7 @@ pub async fn start_all(
     start_order: &[String],
     global_env: &BTreeMap<String, String>,
     channels: &Channels,
-    mut event_rx: mpsc::UnboundedReceiver<message::Event>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
     network: Option<&str>,
 ) -> Result<StartupResult, Error> {
     let shell = match &config.shell {
@@ -159,7 +153,7 @@ pub async fn start_all(
 
         if is_oneshot {
             if let Some(result) =
-                handle_oneshot(name, &cmd_senders, &mut event_rx, &channels.notify).await?
+                handle_oneshot(name, &cmd_senders, event_rx, &channels.notify).await?
             {
                 return Ok(result);
             }
@@ -173,15 +167,7 @@ pub async fn start_all(
                 )?;
             }
 
-            match start_service(
-                name,
-                proc_def,
-                &cmd_senders,
-                &mut event_rx,
-                &channels.notify,
-            )
-            .await?
-            {
+            match start_service(name, proc_def, &cmd_senders, event_rx, &channels.notify).await? {
                 ServiceOutcome::Ready => {}
                 ServiceOutcome::CrashedDuringStartup { code, failed_name } => {
                     return Ok(StartupResult::CrashedDuringStartup { code, failed_name });
@@ -190,7 +176,7 @@ pub async fn start_all(
         }
     }
 
-    Ok(StartupResult::Ready(cmd_senders, event_rx))
+    Ok(StartupResult::Ready(cmd_senders))
 }
 
 async fn handle_oneshot(

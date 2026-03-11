@@ -52,7 +52,7 @@ pub async fn run(
         names.push("docker".to_string());
     }
 
-    let (event_tx, event_rx) = mpsc::unbounded_channel::<message::Event>();
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel::<message::Event>();
     let (display_tx, display_rx) = mpsc::unbounded_channel::<message::DisplayMsg>();
     let (notify_tx, mut notify_rx) = mpsc::unbounded_channel::<message::Event>();
 
@@ -111,7 +111,7 @@ pub async fn run(
         &start_order,
         &global_env,
         &startup_channels,
-        event_rx,
+        &mut event_rx,
         network_name.as_deref(),
     )
     .await?
@@ -122,11 +122,11 @@ pub async fn run(
                 failed_name: Some(failed_name),
             })
         }
-        startup::StartupResult::Ready(cmd_senders, lifecycle_rx) => {
+        startup::StartupResult::Ready(cmd_senders) => {
             let all_names: Vec<String> =
                 cmd_senders.iter().map(|(name, _tx)| name.clone()).collect();
             drop(event_tx);
-            lifecycle::manage(cmd_senders, &all_names, shutdown, &notify_tx, lifecycle_rx)
+            lifecycle::manage(cmd_senders, &all_names, shutdown, &notify_tx, event_rx)
                 .await
                 .map_err(Error::from)
         }
