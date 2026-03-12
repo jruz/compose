@@ -1,0 +1,11 @@
+processes:
+  bg:
+    command: "sleep 30 & echo bg-started; wait"
+    health:
+      command: "true"
+      interval_secs: 1
+      timeout_secs: 3
+
+  main:
+    command: "sleep 0.3 && echo main-done"
+    depends_on: [bg]

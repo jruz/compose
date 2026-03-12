@@ -195,6 +195,48 @@ fn sigterm_ignored_gets_sigkill() {
 }
 
 #[test]
+fn service_with_child_then_oneshot() {
+    let bin = binary_path();
+    let fixture = fixture_path("service_with_child_then_oneshot.yaml");
+    let script = format!(
+        "{bin} run --config {fixture} &\nPID=$!\n( sleep 10 && kill -9 $PID ) >/dev/null 2>&1 &\nTIMER=$!\nwait $PID 2>/dev/null\nSTATUS=$?\nkill -9 $TIMER 2>/dev/null\nif [ $STATUS -eq 137 ]; then exit 124; fi\nexit $STATUS",
+        bin = bin.display(),
+        fixture = fixture.display(),
+    );
+    let output = run_shell_script(&script);
+    let stdout = stdout_of(&output);
+    assert_ne!(
+        output.status.code(),
+        Some(124_i32),
+        "BUG: compose hung — child processes not cleaned up within 10s\nstdout: {stdout}"
+    );
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "db-ready");
+    assert_stdout_contains(&output, "main-done");
+}
+
+#[test]
+fn process_group_cleanup() {
+    let bin = binary_path();
+    let fixture = fixture_path("process_group_cleanup.yaml");
+    let script = format!(
+        "{bin} run --config {fixture} &\nPID=$!\n( sleep 10 && kill -9 $PID ) >/dev/null 2>&1 &\nTIMER=$!\nwait $PID 2>/dev/null\nSTATUS=$?\nkill -9 $TIMER 2>/dev/null\nif [ $STATUS -eq 137 ]; then exit 124; fi\nexit $STATUS",
+        bin = bin.display(),
+        fixture = fixture.display(),
+    );
+    let output = run_shell_script(&script);
+    let stdout = stdout_of(&output);
+    assert_ne!(
+        output.status.code(),
+        Some(124_i32),
+        "BUG: compose hung — child processes not cleaned up within 10s\nstdout: {stdout}"
+    );
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "bg-started");
+    assert_stdout_contains(&output, "main-done");
+}
+
+#[test]
 fn shell_bash() {
     let output = run_fixture("shell_bash.yaml", "run");
     assert_exit_code(&output, 0);

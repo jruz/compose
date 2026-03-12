@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::os::unix::process::CommandExt as _;
 
 use tokio::sync::mpsc;
 
@@ -24,16 +25,20 @@ pub fn spawn_actor(
     event_tx: mpsc::UnboundedSender<message::Event>,
     display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
-    let mut cmd = tokio::process::Command::new(shell);
-    cmd.arg("-c")
+    let mut std_cmd = std::process::Command::new(shell);
+    std_cmd
+        .arg("-c")
         .arg(command)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
+        .process_group(0);
 
     for (key, value) in env {
-        cmd.env(key, value);
+        std_cmd.env(key, value);
     }
+
+    let mut cmd = tokio::process::Command::from(std_cmd);
+    cmd.kill_on_drop(true);
 
     let mut spawned = spawn_child(&mut cmd).map_err(|source| Error::Spawn {
         name: name.to_string(),

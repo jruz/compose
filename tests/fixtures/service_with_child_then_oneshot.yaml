@@ -1,0 +1,16 @@
+processes:
+  db:
+    command: "sh -c 'echo db-child-running >> /dev/stderr & echo db-ready; sleep 30'"
+    health:
+      command: "true"
+      interval_secs: 1
+      timeout_secs: 5
+
+  migrate:
+    type: oneshot
+    command: "echo migrate-done"
+    depends_on: [db]
+
+  main:
+    command: "echo main-done"
+    depends_on: [migrate]
