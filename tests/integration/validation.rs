@@ -139,6 +139,14 @@ fn unknown_yaml_field_rejected() {
 }
 
 #[test]
+fn last_process_oneshot() {
+    let output = run_fixture("validation_last_oneshot.yaml", "run");
+    assert_ne!(output.status.code(), Some(0_i32));
+    assert_stdout_contains(&output, "oneshot");
+    assert_stdout_contains(&output, "run mode requires a service");
+}
+
+#[test]
 fn nonexistent_shell_binary() {
     let output = run_fixture("shell_nonexistent.yaml", "run");
     assert_ne!(output.status.code(), Some(0_i32));
