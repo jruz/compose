@@ -113,6 +113,9 @@ release-build:
 release-upload TAG:
     bun scripts/release-upload.ts {{ TAG }}
 
+release-delete TAG:
+    bun scripts/release-delete.ts {{ TAG }}
+
 woodpecker-check:
     #!/usr/bin/env nu
     glob .woodpecker/*.yml | each {|f|
