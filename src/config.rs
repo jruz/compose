@@ -37,6 +37,9 @@ pub enum Error {
     #[error("{name}: health check must specify command or exec")]
     HealthEmpty { name: String },
 
+    #[error("last process {name} is oneshot — run mode requires a service as the final process")]
+    LastProcessOneshot { name: String },
+
     #[error("no processes defined")]
     NoProcesses,
 

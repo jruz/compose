@@ -15,6 +15,9 @@ use crate::startup;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
+    Config(#[from] config::Error),
+
+    #[error(transparent)]
     DockerInfra(#[from] docker_infra::Error),
 
     #[error(transparent)]
@@ -51,6 +54,7 @@ pub async fn run(
 
     let start_order = startup::resolve_start_order(&config);
     let shutdown = resolve_shutdown(&mode, &start_order)?;
+    check_main_not_oneshot(&shutdown, &config)?;
     let network_name = if has_docker {
         Some(
             docker_infra::setup(&config, &start_order, project_name.as_deref(), &display_tx)
@@ -116,6 +120,20 @@ async fn run_lifecycle(
                 .await
                 .map_err(Error::from)
         }
+    }
+}
+
+fn check_main_not_oneshot(
+    shutdown: &lifecycle::ShutdownStrategy,
+    config: &config::Config,
+) -> Result<(), Error> {
+    let is_oneshot = matches!(shutdown, lifecycle::ShutdownStrategy::MainProcess(name)
+        if config.processes.get(name).is_some_and(|proc| proc.process_type == config::ProcessType::Oneshot)
+    );
+    if let (true, lifecycle::ShutdownStrategy::MainProcess(name)) = (is_oneshot, shutdown) {
+        Err(config::Error::LastProcessOneshot { name: name.clone() }.into())
+    } else {
+        Ok(())
     }
 }
 
