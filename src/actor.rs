@@ -335,11 +335,12 @@ pub async fn graceful_kill(child: &mut tokio::process::Child) {
     let Ok(pid) = i32::try_from(pid) else {
         return;
     };
-    if let Err(_signal_err) = signal::kill(Pid::from_raw(pid), Signal::SIGTERM) {}
+    let group = Pid::from_raw(pid);
+    if let Err(_signal_err) = signal::killpg(group, Signal::SIGTERM) {}
     tokio::select! {
         _status = child.wait() => {}
         () = tokio::time::sleep(Duration::from_secs(GRACEFUL_SHUTDOWN_SECS)) => {
-            let _kill = child.kill().await;
+            if let Err(_signal_err) = signal::killpg(group, Signal::SIGKILL) {}
             let _wait = child.wait().await;
         }
     }
