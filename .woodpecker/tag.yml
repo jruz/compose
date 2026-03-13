@@ -9,7 +9,7 @@ when:
 
 steps:
   - name: AUTO_TAG
-    image: alpine/git:latest
+    image: alpine/git:v2.52.0
     environment:
       CODEBERG_TOKEN:
         from_secret: CODEBERG_TOKEN

@@ -5,12 +5,16 @@ const headers = (token: string) => ({
   Authorization: `token ${token}`,
 });
 
-const ensureRelease = async (tag: string, token: string, repo: string): Promise<number> => {
+const ensureRelease = async (
+  tag: string,
+  token: string,
+  repo: string,
+): Promise<number> => {
   const url = `https://codeberg.org/api/v1/repos/${repo}/releases/tags/${tag}`;
   const res = await fetch(url, { headers: headers(token) });
 
   if (res.ok) {
-    const data = await res.json();
+    const data = (await res.json()) as { id: number };
     log.info(`release ${tag} already exists (id: ${data.id})`);
     return data.id;
   }
@@ -21,23 +25,31 @@ const ensureRelease = async (tag: string, token: string, repo: string): Promise<
   }
 
   log.info(`creating release ${tag}...`);
-  const createRes = await fetch(`https://codeberg.org/api/v1/repos/${repo}/releases`, {
-    method: "POST",
-    headers: { ...headers(token), "Content-Type": "application/json" },
-    body: JSON.stringify({ tag_name: tag, name: tag }),
-  });
+  const createRes = await fetch(
+    `https://codeberg.org/api/v1/repos/${repo}/releases`,
+    {
+      method: "POST",
+      headers: { ...headers(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ tag_name: tag, name: tag }),
+    },
+  );
 
   if (!createRes.ok) {
     const text = await createRes.text();
     throw new Error(`create release: ${createRes.status} ${text}`);
   }
 
-  const data = await createRes.json();
-  log.info(`created release ${tag} (id: ${data.id})`);
-  return data.id;
+  const created = (await createRes.json()) as { id: number };
+  log.info(`created release ${tag} (id: ${created.id})`);
+  return created.id;
 };
 
-const upload = async (file: string, releaseId: number, token: string, repo: string): Promise<void> => {
+const upload = async (
+  file: string,
+  releaseId: number,
+  token: string,
+  repo: string,
+): Promise<void> => {
   const url = `https://codeberg.org/api/v1/repos/${repo}/releases/${releaseId}/assets?name=${file}`;
   const body = await Bun.file(file).arrayBuffer();
 
@@ -60,27 +72,32 @@ const main = async () => {
     process.exit(1);
   }
 
-  const token = process.env.CODEBERG_TOKEN;
+  const token = process.env["CODEBERG_TOKEN"];
   if (!token) throw new Error("CODEBERG_TOKEN is not set");
 
-  const repo = process.env.CI_REPO;
+  const repo = process.env["CI_REPO"];
   if (!repo) throw new Error("CI_REPO is not set");
 
-  const glob = new Glob("compose-*");
+  const name = process.env["CI_REPO_NAME"];
+  if (!name) throw new Error("CI_REPO_NAME is not set");
+
+  const glob = new Glob(`${name}-*`);
   const files = Array.from(glob.scanSync("."));
 
   if (files.length === 0) {
-    log.error("no compose-* files found");
+    log.error(`no ${name}-* files found`);
     process.exit(1);
   }
 
   const releaseId = await ensureRelease(tag, token, repo);
 
-  await Promise.all(files.map(async (file) => {
-    log.info(`uploading ${file}...`);
-    await upload(file, releaseId, token, repo);
-    log.info(`uploaded ${file}`);
-  }));
+  await Promise.all(
+    files.map(async (file) => {
+      log.info(`uploading ${file}...`);
+      await upload(file, releaseId, token, repo);
+      log.info(`uploaded ${file}`);
+    }),
+  );
 
   log.info("release upload complete");
 };
