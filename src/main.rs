@@ -13,6 +13,7 @@ mod process;
 mod shutdown;
 mod startup;
 mod supervisor;
+mod version;
 
 use std::process::ExitCode;
 

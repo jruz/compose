@@ -27,8 +27,8 @@ fn version_flag() {
         panic!("missing build-time value in line: {build_time_line}")
     };
     assert!(
-        build_time.contains('T') && build_time.contains('Z'),
-        "build-time should be ISO 8601 format, got: {build_time}"
+        build_time.contains("UTC"),
+        "build-time should contain UTC, got: {build_time}"
     );
 
     let Some(revision_line) = stdout.lines().find(|line| line.starts_with("revision: ")) else {
