@@ -2,18 +2,11 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
-const VERSION_STRING: &str = concat!(
-    "\nversion: ",
-    env!("CARGO_PKG_VERSION"),
-    "\nbuild-time: ",
-    env!("BUILD_TIME"),
-    "\nrevision: ",
-    env!("REVISION"),
-);
+use crate::version;
 
 #[derive(Debug, Parser)]
 #[command(
-    version = VERSION_STRING,
+    version = version::clap_version(),
     about = "Simple process orchestrator",
     long_about = "\
 Simple process orchestrator
