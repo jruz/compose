@@ -11,6 +11,15 @@ const run = async (cmd: string[]): Promise<{ ok: boolean; stdout: string }> => {
   return { ok: code === 0, stdout: stdout.trim() };
 };
 
+const repoFromRemote = async (): Promise<string> => {
+  const result = await run(["git", "remote", "get-url", "origin"]);
+  if (!result.ok) throw new Error("failed to get origin remote URL");
+  const match = /codeberg\.org[:/](.+?)(?:\.git)?$/.exec(result.stdout);
+  if (!match)
+    throw new Error(`cannot parse repo from remote: ${result.stdout}`);
+  return match[1];
+};
+
 const deleteLocalTag = async (tag: string): Promise<void> => {
   const list = await run(["git", "tag", "--list", tag]);
   if (list.stdout === "") {
@@ -23,7 +32,13 @@ const deleteLocalTag = async (tag: string): Promise<void> => {
 };
 
 const deleteRemoteTag = async (tag: string): Promise<void> => {
-  const list = await run(["git", "ls-remote", "--tags", "origin", `refs/tags/${tag}`]);
+  const list = await run([
+    "git",
+    "ls-remote",
+    "--tags",
+    "origin",
+    `refs/tags/${tag}`,
+  ]);
   if (list.stdout === "") {
     log.info(`remote tag ${tag} not found, skipping`);
     return;
@@ -33,12 +48,16 @@ const deleteRemoteTag = async (tag: string): Promise<void> => {
   log.info(`deleted remote tag ${tag}`);
 };
 
-const findRelease = async (tag: string, token: string, repo: string): Promise<number | null> => {
+const findRelease = async (
+  tag: string,
+  token: string,
+  repo: string,
+): Promise<number | null> => {
   const url = `https://codeberg.org/api/v1/repos/${repo}/releases/tags/${tag}`;
   const res = await fetch(url, { headers: headers(token) });
 
   if (res.ok) {
-    const data = await res.json();
+    const data = (await res.json()) as { id: number };
     return data.id;
   }
 
@@ -50,7 +69,11 @@ const findRelease = async (tag: string, token: string, repo: string): Promise<nu
   throw new Error(`check release: ${res.status} ${text}`);
 };
 
-const deleteRelease = async (releaseId: number, token: string, repo: string): Promise<void> => {
+const deleteRelease = async (
+  releaseId: number,
+  token: string,
+  repo: string,
+): Promise<void> => {
   const url = `https://codeberg.org/api/v1/repos/${repo}/releases/${releaseId}`;
   const res = await fetch(url, {
     method: "DELETE",
@@ -70,10 +93,10 @@ const main = async () => {
     process.exit(1);
   }
 
-  const token = process.env.CODEBERG_TOKEN;
+  const token = process.env["CODEBERG_TOKEN"];
   if (!token) throw new Error("CODEBERG_TOKEN is not set");
 
-  const repo = process.env.CI_REPO ?? "jruz/compose";
+  const repo = await repoFromRemote();
 
   await deleteLocalTag(tag);
   await deleteRemoteTag(tag);

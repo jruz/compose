@@ -94,21 +94,13 @@ generate-screenshots:
     vhs examples/vhs/up.tape
     vhs examples/vhs/fail.tape
 
-release-build:
-    #!/usr/bin/env nu
-    let targets = [
-        {target: "x86_64-unknown-linux-gnu", suffix: "linux-x86_64"}
-        {target: "aarch64-unknown-linux-gnu", suffix: "linux-arm64"}
-        {target: "x86_64-apple-darwin", suffix: "macos-x86_64"}
-        {target: "aarch64-apple-darwin", suffix: "macos-arm64"}
-    ]
-    for t in $targets {
-        let output = $"compose-($t.suffix)"
-        print $"Building ($output)..."
-        ^cargo build --release --target $t.target
-        cp $"target/($t.target)/release/compose" $output
-        print $"(ansi green)OK: ($output)(ansi reset)"
-    }
+release-build-linux:
+    scripts/release-build.sh unknown-linux-gnu x86_64
+    scripts/release-build.sh unknown-linux-gnu aarch64
+
+release-build-macos:
+    scripts/release-build.sh apple-darwin x86_64
+    scripts/release-build.sh apple-darwin aarch64
 
 release-upload TAG:
     bun scripts/release-upload.ts {{ TAG }}
