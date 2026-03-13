@@ -211,8 +211,8 @@ processes:
       image: <string> # docker image (required if no build)
       build: <string> # build context path (required if no image)
       dockerfile: <string> # dockerfile path (optional)
-      ports: [<host:container>] # port mappings
-      volumes: [<host:container>] # volume mounts
+      ports: [<host:container>] # port mappings, supports ${VAR}
+      volumes: [<host:container>] # volume mounts, supports ${VAR}
       stop_timeout_secs: <int> # seconds before force kill (default: 10)
     depends_on: [<string>, ...] # processes that must be healthy first
     env:

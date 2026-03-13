@@ -1,0 +1,10 @@
+processes:
+  port-srv:
+    docker:
+      build: ./server
+      ports:
+        - "${HOST_PORT}:8080"
+    health:
+      command: "cat /tmp/ready"
+      interval_secs: 1
+      timeout_secs: 10

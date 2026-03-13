@@ -37,8 +37,8 @@ processes:
       image: <string>             # required if no build
       build: <path>               # build context
       dockerfile: <path>          # optional, custom Dockerfile path
-      ports: [<host:container>]
-      volumes: [<host:container>]
+      ports: [<host:container>]     # supports ${VAR} interpolation
+      volumes: [<host:container>]   # supports ${VAR} interpolation
       stop_timeout_secs: <int>    # optional, omit for docker default (10s)
     type: service | oneshot       # optional, default: service
     depends_on: [<name>, ...]     # optional
