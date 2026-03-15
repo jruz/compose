@@ -43,6 +43,7 @@
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           REVISION = revision;
+          CARGO_HOME = "$TMPDIR";
           doCheck = false;
           buildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin [ pkgs.libiconv ];
         };
