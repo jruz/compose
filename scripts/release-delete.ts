@@ -92,6 +92,10 @@ const main = async () => {
     log.error("usage: bun scripts/release-delete.ts <tag>");
     process.exit(1);
   }
+  if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+    log.error(`invalid tag format: ${tag} (expected v0.0.0)`);
+    process.exit(1);
+  }
 
   const token = process.env["CODEBERG_TOKEN"];
   if (!token) throw new Error("CODEBERG_TOKEN is not set");
