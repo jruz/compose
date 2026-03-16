@@ -59,7 +59,10 @@ pub fn container_name(network: &str, process_name: &str) -> String {
 
 pub fn build_command(tag: &str, context: &str, dockerfile: Option<&str>) -> process::Command {
     let mut cmd = process::Command::new("docker");
-    cmd.arg("build").arg("--tag").arg(tag);
+    cmd.arg("build")
+        .arg("--progress=plain")
+        .arg("--tag")
+        .arg(tag);
     if let Some(file) = dockerfile {
         cmd.arg("--file").arg(file);
     }
