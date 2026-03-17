@@ -19,7 +19,7 @@ steps:
       - scripts/release-build.sh apple-darwin aarch64
 
   - name: RELEASE
-    image: 127.0.0.1:5000/woodpecker-job:v0.0.15
+    image: 127.0.0.1:5000/woodpecker-job:v0.0.17
     environment:
       CODEBERG_TOKEN:
         from_secret: CODEBERG_TOKEN
