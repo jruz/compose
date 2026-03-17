@@ -67,6 +67,9 @@ rust-upgrade:
     cargo upgrade --incompatible
     cargo update
 
+docker-clean:
+    bun scripts/docker-clean.ts
+
 example-run:
     cargo build --release
     ./target/release/compose run --config examples/compose.run.yaml
