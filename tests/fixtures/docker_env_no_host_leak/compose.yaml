@@ -1,8 +1,10 @@
 processes:
   bg:
     docker:
+      image: compose-test-bg
       build: ./bg
 
   main:
     docker:
+      image: compose-test-main
       build: ./main

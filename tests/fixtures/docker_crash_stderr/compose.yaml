@@ -1,8 +1,10 @@
 processes:
   crash-worker:
     docker:
+      image: compose-test-crash-worker
       build: ./crasher
 
   crash-main:
     docker:
+      image: compose-test-crash-main
       build: ./main

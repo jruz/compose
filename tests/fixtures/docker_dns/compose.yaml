@@ -1,6 +1,7 @@
 processes:
   dns-server:
     docker:
+      image: compose-test-dns-server
       build: ./server
     health:
       command: "true"
@@ -9,5 +10,6 @@ processes:
 
   dns-client:
     docker:
+      image: compose-test-dns-client
       build: ./client
     depends_on: [dns-server]

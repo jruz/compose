@@ -1,6 +1,7 @@
 processes:
   host-env-main:
     docker:
+      image: compose-test-host-env-main
       build: ./app
     env:
       RESULT: "${DOCKER_HOST_TEST_VAR}"

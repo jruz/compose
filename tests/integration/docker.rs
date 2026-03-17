@@ -201,7 +201,7 @@ fn docker_volumes() {
 
     let dir = fixture_path("docker_volumes");
     let compose_content = format!(
-        "processes:\n  vol-main:\n    docker:\n      build: ./app\n      volumes:\n        - \"{vol}:/mnt/data\"\n"
+        "processes:\n  vol-main:\n    docker:\n      image: compose-test-vol-main\n      build: ./app\n      volumes:\n        - \"{vol}:/mnt/data\"\n"
     );
     match std::fs::write(dir.join("compose.yaml"), compose_content) {
         Ok(()) => {}
@@ -231,7 +231,7 @@ fn docker_volume_expansion_from_host_env() {
     docker_volume_populate(&vol, "file.txt", "expanded-host-var\n");
 
     let dir = fixture_path("docker_volume_expansion");
-    let compose_content = "processes:\n  vol-host:\n    docker:\n      build: ./app\n      volumes:\n        - \"${VOLUME_HOST_DIR}:/mnt/data\"\n";
+    let compose_content = "processes:\n  vol-host:\n    docker:\n      image: compose-test-vol-host\n      build: ./app\n      volumes:\n        - \"${VOLUME_HOST_DIR}:/mnt/data\"\n";
     match std::fs::write(dir.join("compose_host.yaml"), compose_content) {
         Ok(()) => {}
         Err(err) => panic!("failed to write compose yaml: {err}"),
@@ -267,7 +267,7 @@ fn docker_volume_expansion_from_process_env() {
 
     let dir = fixture_path("docker_volume_expansion");
     let compose_content = format!(
-        "processes:\n  vol-proc:\n    docker:\n      build: ./app\n      volumes:\n        - \"${{DATA_PATH}}:/mnt/data\"\n    env:\n      DATA_PATH: \"{vol}\"\n"
+        "processes:\n  vol-proc:\n    docker:\n      image: compose-test-vol-proc\n      build: ./app\n      volumes:\n        - \"${{DATA_PATH}}:/mnt/data\"\n    env:\n      DATA_PATH: \"{vol}\"\n"
     );
     match std::fs::write(dir.join("compose_proc.yaml"), compose_content) {
         Ok(()) => {}
@@ -298,7 +298,7 @@ fn docker_volume_expansion_from_process_env() {
 #[test]
 fn docker_volume_expansion_undefined_stays_literal() {
     let dir = fixture_path("docker_volume_expansion");
-    let compose_content = "processes:\n  vol-undef:\n    docker:\n      build: ./app\n      volumes:\n        - \"${UNDEFINED_VAR_XYZZY}:/mnt/data\"\n";
+    let compose_content = "processes:\n  vol-undef:\n    docker:\n      image: compose-test-vol-undef\n      build: ./app\n      volumes:\n        - \"${UNDEFINED_VAR_XYZZY}:/mnt/data\"\n";
     match std::fs::write(dir.join("compose_undef.yaml"), compose_content) {
         Ok(()) => {}
         Err(err) => panic!("failed to write compose yaml: {err}"),

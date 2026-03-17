@@ -1,6 +1,7 @@
 processes:
   svc-server:
     docker:
+      image: compose-test-svc-server
       build: ./server
     health:
       command: "true"
@@ -9,5 +10,6 @@ processes:
 
   svc-client:
     docker:
+      image: compose-test-svc-client
       build: ./client
     depends_on: [svc-server]

@@ -1,5 +1,6 @@
 processes:
   echo-cmd:
     docker:
+      image: compose-test-echo-cmd
       build: .
     command: "hello from command"
