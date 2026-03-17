@@ -1,6 +1,7 @@
 processes:
   empty-env-main:
     docker:
+      image: compose-test-empty-env-main
       build: ./app
     env:
       EMPTY_VAR: ""

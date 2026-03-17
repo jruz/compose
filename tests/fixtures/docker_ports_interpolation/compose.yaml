@@ -1,6 +1,7 @@
 processes:
   port-srv:
     docker:
+      image: compose-test-port-srv
       build: ./server
       ports:
         - "${HOST_PORT}:8080"
