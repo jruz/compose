@@ -57,6 +57,13 @@ pub fn container_name(network: &str, process_name: &str) -> String {
     format!("{network}-{process_name}")
 }
 
+pub fn image_tag(network: &str, process_name: &str, image: Option<&str>) -> String {
+    match image {
+        Some(explicit) => explicit.to_string(),
+        None => format!("{network}-{process_name}"),
+    }
+}
+
 pub fn build_command(tag: &str, context: &str, dockerfile: Option<&str>) -> process::Command {
     let mut cmd = process::Command::new("docker");
     cmd.arg("build")

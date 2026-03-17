@@ -19,6 +19,7 @@ pub enum Error {
 pub async fn build(
     config: &config::Config,
     start_order: &[String],
+    network: &str,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<(), Error> {
     for name in start_order {
@@ -37,13 +38,10 @@ pub async fn build(
             message::DisplayMsg::Docker(message::DockerMsg::Building { name: name.clone() }),
         )?;
 
-        let tag = match &docker_config.image {
-            Some(image) => image.as_str(),
-            None => name,
-        };
+        let tag = docker::image_tag(network, name, docker_config.image.as_deref());
 
         let mut child = process::spawn_child(&mut docker::build_command(
-            tag,
+            &tag,
             build_context,
             docker_config.dockerfile.as_deref(),
         ))
