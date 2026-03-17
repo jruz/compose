@@ -31,7 +31,7 @@ pub async fn setup(
         }),
     )?;
     docker::network_create(&network).await?;
-    build_actor::build(config, start_order, display_tx).await?;
+    build_actor::build(config, start_order, &network, display_tx).await?;
     Ok(network)
 }
 
@@ -91,10 +91,9 @@ pub async fn cleanup(
 }
 
 fn generate_network_name(project_name: Option<&str>) -> String {
-    let pid = std::process::id();
     match project_name {
-        Some(name) => format!("compose-{name}-{pid}"),
-        None => format!("compose-{pid}"),
+        Some(name) => format!("compose-{name}"),
+        None => format!("compose-{}", std::process::id()),
     }
 }
 

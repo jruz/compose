@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use tokio::sync::mpsc;
 
 use crate::config;
+use crate::docker;
 use crate::docker_actor;
 use crate::env;
 use crate::message;
@@ -378,7 +379,7 @@ fn spawn_process_actor(
     output_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
-        let image = docker_image_tag(name, docker_config);
+        let image = docker::image_tag(net, name, docker_config.image.as_deref());
         let ports: Vec<String> = docker_config
             .ports
             .iter()
@@ -419,13 +420,6 @@ fn spawn_process_actor(
             output_tx.clone(),
         )?;
         Ok(cmd_tx)
-    }
-}
-
-fn docker_image_tag(name: &str, docker_config: &config::DockerConfig) -> String {
-    match &docker_config.image {
-        Some(image) => image.clone(),
-        None => name.to_string(),
     }
 }
 
