@@ -9,6 +9,10 @@ check-ci:
     just check
     just rust-test
 
+compose-check:
+    cargo build --release
+    ./target/release/compose run --config compose.check.yaml
+
 test:
     just rust-test
 
