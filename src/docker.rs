@@ -22,8 +22,8 @@ pub enum Error {
     #[error("docker network create failed: {source}")]
     NetworkCreate { source: std::io::Error },
 
-    #[error("docker network create failed with exit code {code}")]
-    NetworkCreateFailed { code: i32 },
+    #[error("docker network create failed with exit code {code}: {stderr}")]
+    NetworkCreateFailed { code: i32, stderr: String },
 
     #[error("docker network create failed (killed by signal)")]
     NetworkCreateKilled,
@@ -199,7 +199,8 @@ pub async fn network_create(binary: &str, name: &str) -> Result<(), Error> {
         let Some(code) = output.status.code() else {
             return Err(Error::NetworkCreateKilled);
         };
-        return Err(Error::NetworkCreateFailed { code });
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(Error::NetworkCreateFailed { code, stderr });
     }
 
     Ok(())
