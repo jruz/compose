@@ -28,6 +28,14 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 - fixtures in `tests/fixtures/*.yaml`
 - tests run the compiled binary via `env!("CARGO_BIN_EXE_compose")`
 
+## Documentation
+
+When adding or changing config fields or features, update all three places:
+
+- `src/cli.rs` - `long_about` schema in `--help`
+- `README.md` - config schema and usage examples
+- `CLAUDE.md` - config schema below
+
 ## Config Schema
 
 ```yaml
