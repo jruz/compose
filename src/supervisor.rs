@@ -44,7 +44,8 @@ pub async fn run(
     log_tx: mpsc::UnboundedSender<String>,
 ) -> Result<message::ExitResult, Error> {
     let has_docker = config.processes.values().any(|proc| proc.docker.is_some());
-    let names = display_names(&config, has_docker);
+    let binary = config::runtime_binary(&config.runtime);
+    let names = display_names(&config, has_docker, binary);
 
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     let (display_tx, display_rx) = mpsc::unbounded_channel();
@@ -57,8 +58,14 @@ pub async fn run(
     check_main_not_oneshot(&shutdown, &config)?;
     let network_name = if has_docker {
         Some(
-            docker_infra::setup(&config, &start_order, project_name.as_deref(), &display_tx)
-                .await?,
+            docker_infra::setup(
+                binary,
+                &config,
+                &start_order,
+                project_name.as_deref(),
+                &display_tx,
+            )
+            .await?,
         )
     } else {
         None
@@ -66,6 +73,7 @@ pub async fn run(
     let global_env = env::load_global(global_env_file.as_deref())?;
 
     let channels = startup::Channels {
+        binary,
         events: event_tx.clone(),
         notify: notify_tx.clone(),
         output: display_tx.clone(),
@@ -82,7 +90,7 @@ pub async fn run(
     let result = run_lifecycle(startup_result, event_tx, shutdown, &notify_tx, event_rx).await;
 
     if let Some(net) = &network_name {
-        docker_infra::cleanup(&config, &start_order, net, &display_tx).await;
+        docker_infra::cleanup(binary, &config, &start_order, net, &display_tx).await;
     }
     drop(notify_tx);
     drop(channels);
@@ -90,10 +98,10 @@ pub async fn run(
     result
 }
 
-fn display_names(config: &config::Config, has_docker: bool) -> Vec<String> {
+fn display_names(config: &config::Config, has_docker: bool, runtime_label: &str) -> Vec<String> {
     let mut names: Vec<String> = config.processes.keys().cloned().collect();
     if has_docker {
-        names.push("docker".to_string());
+        names.push(runtime_label.to_string());
     }
     names
 }

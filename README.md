@@ -93,13 +93,14 @@ processes:
     depends_on: [redis]
 ```
 
-### Docker mode
+### Container mode
 
-Instead of running shell commands, processes can run as docker containers.
+Instead of running shell commands, processes can run as containers via docker or podman.
 
-- Each run creates an isolated docker network
+- Set `runtime: podman` at the top level to use podman (default: `docker`)
+- Each run creates an isolated container network
 - Services are reachable by their process name (e.g. process `db` is reachable as `db`)
-- Health checks run inside the container via `docker exec` (`command` uses `sh -c`, `exec` runs directly)
+- Health checks run inside the container via `exec` (`command` uses `sh -c`, `exec` runs directly)
 - All containers and the network are cleaned up on exit
 
 ```
@@ -201,6 +202,7 @@ Precedence: process env > env file > host environment.
 ## Config schema
 
 ```yaml
+runtime: <docker|podman> # container runtime (default: docker)
 shell: <string> # shell for exec processes (default: sh)
 processes:
   <name>:

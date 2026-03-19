@@ -60,7 +60,17 @@ pub enum Error {
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub processes: IndexMap<String, ProcessDef>,
+    #[serde(default)]
+    pub runtime: Runtime,
     pub shell: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Runtime {
+    #[default]
+    Docker,
+    Podman,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,6 +120,13 @@ pub enum ProcessType {
 
 fn default_process_type() -> ProcessType {
     ProcessType::Service
+}
+
+pub fn runtime_binary(runtime: &Runtime) -> &str {
+    match runtime {
+        Runtime::Docker => "docker",
+        Runtime::Podman => "podman",
+    }
 }
 
 pub fn load(path: &Path) -> Result<Config, Error> {
