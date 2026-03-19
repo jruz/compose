@@ -31,6 +31,7 @@ pub async fn setup(
             name: binary.to_string(),
         }),
     )?;
+    docker::network_rm(binary, &network).await?;
     docker::network_create(binary, &network).await?;
     build_actor::build(binary, config, start_order, &network, display_tx).await?;
     Ok(network)
