@@ -34,6 +34,7 @@ enum HealthOutcome {
 
 pub enum Driver {
     Docker {
+        binary: String,
         container: String,
         stop_timeout_secs: Option<u64>,
     },
@@ -279,9 +280,10 @@ async fn kill_process(driver: &Driver, child: &mut tokio::process::Child) {
     match driver {
         Driver::Exec => graceful_kill(child).await,
         Driver::Docker {
+            binary,
             container,
             stop_timeout_secs,
-        } => if let Err(_stop_err) = docker::stop(container, *stop_timeout_secs).await {},
+        } => if let Err(_stop_err) = docker::stop(binary, container, *stop_timeout_secs).await {},
     }
 }
 
@@ -291,7 +293,9 @@ async fn check_health(
 ) -> Result<std::process::Output, String> {
     match driver {
         Driver::Exec => run_exec_health(cmd).await.map_err(|err| err.to_string()),
-        Driver::Docker { container, .. } => run_docker_health(container, cmd)
+        Driver::Docker {
+            binary, container, ..
+        } => run_docker_health(binary, container, cmd)
             .await
             .map_err(|err| err.to_string()),
     }
@@ -319,12 +323,13 @@ async fn run_exec_health(cmd: &HealthCommand) -> std::io::Result<std::process::O
 }
 
 async fn run_docker_health(
+    binary: &str,
     container: &str,
     cmd: &HealthCommand,
 ) -> Result<std::process::Output, docker::Error> {
     match cmd {
-        HealthCommand::Shell(shell_cmd) => docker::exec_shell(container, shell_cmd).await,
-        HealthCommand::Exec(args) => docker::exec_check(container, args).await,
+        HealthCommand::Shell(shell_cmd) => docker::exec_shell(binary, container, shell_cmd).await,
+        HealthCommand::Exec(args) => docker::exec_check(binary, container, args).await,
     }
 }
 

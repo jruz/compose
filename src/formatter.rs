@@ -39,7 +39,7 @@ pub fn spawn_task(
         .map(|name| {
             let style = if !use_color {
                 Style::new()
-            } else if name == "docker" {
+            } else if name == "docker" || name == "podman" {
                 Style::new().blue()
             } else {
                 let style = color_for_index(process_index);

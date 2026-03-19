@@ -17,6 +17,7 @@ pub enum Error {
 }
 
 pub async fn build(
+    binary: &str,
     config: &config::Config,
     start_order: &[String],
     network: &str,
@@ -41,6 +42,7 @@ pub async fn build(
         let tag = docker::image_tag(network, name, docker_config.image.as_deref());
 
         let mut child = process::spawn_child(&mut docker::build_command(
+            binary,
             &tag,
             build_context,
             docker_config.dockerfile.as_deref(),

@@ -7,6 +7,7 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 - `just check` - full lint suite (fmt, clippy, build, test)
 - `just test` - run tests with cargo nextest
 - `just fix` - auto-fix fmt and clippy
+- `just compose-check` - run `just check` inside a podman container via compose
 
 ## Architecture
 
@@ -15,7 +16,7 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 - `actor.rs` - shared actor loop: output streaming, health check polling, graceful kill (exec: SIGTERM+SIGKILL, docker: docker stop)
 - `process.rs` - spawns exec processes via `sh -c`, delegates to actor loop
 - `docker_actor.rs` - spawns docker containers via `docker run`, delegates to actor loop
-- `docker.rs` - docker CLI wrappers (build, run, exec, stop, rm, network)
+- `docker.rs` - container CLI wrappers (build, run, exec, stop, rm, network), runtime-agnostic via binary parameter
 - `supervisor.rs` - starts processes in dependency order, manages lifecycle, handles shutdown signals
 - `env.rs` - env resolution: global env file, process env file, inline env, `${VAR}` interpolation with cycle detection
 - `formatter.rs` - colored tagged output, 6-color cycle
@@ -30,6 +31,7 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 ## Config Schema
 
 ```yaml
+runtime: docker | podman         # optional, default: docker
 processes:
   <name>:
     command: <string>             # exec driver

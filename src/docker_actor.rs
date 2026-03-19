@@ -20,6 +20,7 @@ pub enum Error {
 }
 
 pub struct RunConfig<'cfg> {
+    pub binary: &'cfg str,
     pub command: Option<&'cfg str>,
     pub env: &'cfg BTreeMap<String, String>,
     pub exec: Option<&'cfg [String]>,
@@ -49,7 +50,7 @@ pub fn spawn_actor(
         ports: run.ports,
         volumes: run.volumes,
     };
-    let mut docker_cmd = docker::run_command(&docker_run);
+    let mut docker_cmd = docker::run_command(run.binary, &docker_run);
     let mut spawned =
         crate::process::spawn_child(&mut docker_cmd).map_err(|source| Error::Spawn {
             name: run.name.to_string(),
@@ -63,6 +64,7 @@ pub fn spawn_actor(
     let actor_name = run.name.to_string();
     let channels = actor::ActorChannels { cmd_rx, event_tx };
     let driver = actor::Driver::Docker {
+        binary: run.binary.to_string(),
         container,
         stop_timeout_secs: run.stop_timeout_secs,
     };

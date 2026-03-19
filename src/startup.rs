@@ -37,7 +37,8 @@ pub enum Error {
     Shutdown(#[from] shutdown::Error),
 }
 
-pub struct Channels {
+pub struct Channels<'cfg> {
+    pub binary: &'cfg str,
     pub events: mpsc::UnboundedSender<message::Event>,
     pub notify: mpsc::UnboundedSender<message::Event>,
     pub output: mpsc::UnboundedSender<message::DisplayMsg>,
@@ -104,7 +105,7 @@ pub async fn start_all(
     config: &config::Config,
     start_order: &[String],
     global_env: &BTreeMap<String, String>,
-    channels: &Channels,
+    channels: &Channels<'_>,
     event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
     network: Option<&str>,
 ) -> Result<StartupResult, Error> {
@@ -128,7 +129,7 @@ pub async fn start_all(
 
         let start_label = match (&proc_def.command, &proc_def.docker) {
             (Some(cmd), _) => cmd.clone(),
-            (None, Some(_)) => format!("docker:{name}"),
+            (None, Some(_)) => format!("{}:{name}", channels.binary),
             (None, None) => continue,
         };
 
@@ -142,15 +143,7 @@ pub async fn start_all(
 
         let env = env::resolve(global_env, proc_def)?;
 
-        let cmd_tx = spawn_process_actor(
-            name,
-            proc_def,
-            shell,
-            &env,
-            network,
-            &channels.events,
-            &channels.output,
-        )?;
+        let cmd_tx = spawn_process_actor(name, proc_def, shell, &env, network, channels)?;
 
         if is_oneshot {
             if let Some(result) =
@@ -375,8 +368,7 @@ fn spawn_process_actor(
     shell: &str,
     env: &std::collections::BTreeMap<String, String>,
     network: Option<&str>,
-    event_tx: &mpsc::UnboundedSender<message::Event>,
-    output_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    channels: &Channels<'_>,
 ) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
         let image = docker::image_tag(net, name, docker_config.image.as_deref());
@@ -391,6 +383,7 @@ fn spawn_process_actor(
             .map(|vol| env::expand_vars(vol, env))
             .collect();
         let run_config = docker_actor::RunConfig {
+            binary: channels.binary,
             command: proc_def.command.as_deref(),
             env,
             exec: proc_def.exec.as_deref(),
@@ -402,7 +395,11 @@ fn spawn_process_actor(
             stop_timeout_secs: docker_config.stop_timeout_secs,
             volumes: &volumes,
         };
-        let cmd_tx = docker_actor::spawn_actor(&run_config, event_tx.clone(), output_tx.clone())?;
+        let cmd_tx = docker_actor::spawn_actor(
+            &run_config,
+            channels.events.clone(),
+            channels.output.clone(),
+        )?;
         Ok(cmd_tx)
     } else {
         let Some(command) = &proc_def.command else {
@@ -416,8 +413,8 @@ fn spawn_process_actor(
             shell,
             env,
             proc_def.health.as_ref(),
-            event_tx.clone(),
-            output_tx.clone(),
+            channels.events.clone(),
+            channels.output.clone(),
         )?;
         Ok(cmd_tx)
     }

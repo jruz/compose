@@ -64,8 +64,13 @@ pub fn image_tag(network: &str, process_name: &str, image: Option<&str>) -> Stri
     }
 }
 
-pub fn build_command(tag: &str, context: &str, dockerfile: Option<&str>) -> process::Command {
-    let mut cmd = process::Command::new("docker");
+pub fn build_command(
+    binary: &str,
+    tag: &str,
+    context: &str,
+    dockerfile: Option<&str>,
+) -> process::Command {
+    let mut cmd = process::Command::new(binary);
     cmd.arg("build")
         .arg("--progress=plain")
         .arg("--tag")
@@ -79,8 +84,8 @@ pub fn build_command(tag: &str, context: &str, dockerfile: Option<&str>) -> proc
     cmd
 }
 
-pub fn run_command(run: &RunConfig<'_>) -> process::Command {
-    let mut cmd = process::Command::new("docker");
+pub fn run_command(binary: &str, run: &RunConfig<'_>) -> process::Command {
+    let mut cmd = process::Command::new(binary);
     cmd.arg("run")
         .arg("--rm")
         .arg("--name")
@@ -127,8 +132,12 @@ pub fn run_command(run: &RunConfig<'_>) -> process::Command {
     cmd
 }
 
-pub async fn exec_check(container: &str, args: &[String]) -> Result<std::process::Output, Error> {
-    let mut cmd = process::Command::new("docker");
+pub async fn exec_check(
+    binary: &str,
+    container: &str,
+    args: &[String],
+) -> Result<std::process::Output, Error> {
+    let mut cmd = process::Command::new(binary);
     cmd.arg("exec").arg(container);
     for arg in args {
         cmd.arg(arg);
@@ -136,8 +145,12 @@ pub async fn exec_check(container: &str, args: &[String]) -> Result<std::process
     cmd.output().await.map_err(|source| Error::Exec { source })
 }
 
-pub async fn exec_shell(container: &str, shell_cmd: &str) -> Result<std::process::Output, Error> {
-    process::Command::new("docker")
+pub async fn exec_shell(
+    binary: &str,
+    container: &str,
+    shell_cmd: &str,
+) -> Result<std::process::Output, Error> {
+    process::Command::new(binary)
         .arg("exec")
         .arg(container)
         .arg("sh")
@@ -148,8 +161,8 @@ pub async fn exec_shell(container: &str, shell_cmd: &str) -> Result<std::process
         .map_err(|source| Error::Exec { source })
 }
 
-pub async fn stop(name: &str, timeout_secs: Option<u64>) -> Result<(), Error> {
-    let mut cmd = process::Command::new("docker");
+pub async fn stop(binary: &str, name: &str, timeout_secs: Option<u64>) -> Result<(), Error> {
+    let mut cmd = process::Command::new(binary);
     cmd.arg("stop");
     if let Some(secs) = timeout_secs {
         cmd.arg("--time").arg(secs.to_string());
@@ -162,8 +175,8 @@ pub async fn stop(name: &str, timeout_secs: Option<u64>) -> Result<(), Error> {
     Ok(())
 }
 
-pub async fn rm(name: &str) -> Result<(), Error> {
-    let _output = process::Command::new("docker")
+pub async fn rm(binary: &str, name: &str) -> Result<(), Error> {
+    let _output = process::Command::new(binary)
         .arg("rm")
         .arg("--force")
         .arg(name)
@@ -173,8 +186,8 @@ pub async fn rm(name: &str) -> Result<(), Error> {
     Ok(())
 }
 
-pub async fn network_create(name: &str) -> Result<(), Error> {
-    let output = process::Command::new("docker")
+pub async fn network_create(binary: &str, name: &str) -> Result<(), Error> {
+    let output = process::Command::new(binary)
         .arg("network")
         .arg("create")
         .arg(name)
@@ -192,8 +205,8 @@ pub async fn network_create(name: &str) -> Result<(), Error> {
     Ok(())
 }
 
-pub async fn network_rm(name: &str) -> Result<(), Error> {
-    let _output = process::Command::new("docker")
+pub async fn network_rm(binary: &str, name: &str) -> Result<(), Error> {
+    let _output = process::Command::new(binary)
         .arg("network")
         .arg("rm")
         .arg(name)

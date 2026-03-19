@@ -18,6 +18,7 @@ pub enum Error {
 }
 
 pub async fn setup(
+    binary: &str,
     config: &config::Config,
     start_order: &[String],
     project_name: Option<&str>,
@@ -27,15 +28,16 @@ pub async fn setup(
     send_display(
         display_tx,
         message::DisplayMsg::Docker(message::DockerMsg::CreatingNetwork {
-            name: "docker".to_string(),
+            name: binary.to_string(),
         }),
     )?;
-    docker::network_create(&network).await?;
-    build_actor::build(config, start_order, &network, display_tx).await?;
+    docker::network_create(binary, &network).await?;
+    build_actor::build(binary, config, start_order, &network, display_tx).await?;
     Ok(network)
 }
 
 pub async fn cleanup(
+    binary: &str,
     config: &config::Config,
     start_order: &[String],
     network: &str,
@@ -56,16 +58,16 @@ pub async fn cleanup(
         if let Err(_send_err) = send_display(
             display_tx,
             message::DisplayMsg::Docker(message::DockerMsg::RemovingContainers {
-                name: "docker".to_string(),
+                name: binary.to_string(),
             }),
         ) {}
         for name in &docker_names {
             let container = docker::container_name(network, name);
-            if let Err(rm_err) = docker::rm(&container).await
+            if let Err(rm_err) = docker::rm(binary, &container).await
                 && let Err(_send_err) = send_display(
                     display_tx,
                     message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
-                        name: "docker".to_string(),
+                        name: binary.to_string(),
                         reason: rm_err.to_string(),
                     }),
                 )
@@ -76,14 +78,14 @@ pub async fn cleanup(
     if let Err(_send_err) = send_display(
         display_tx,
         message::DisplayMsg::Docker(message::DockerMsg::RemovingNetwork {
-            name: "docker".to_string(),
+            name: binary.to_string(),
         }),
     ) {}
-    if let Err(rm_err) = docker::network_rm(network).await
+    if let Err(rm_err) = docker::network_rm(binary, network).await
         && let Err(_send_err) = send_display(
             display_tx,
             message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
-                name: "docker".to_string(),
+                name: binary.to_string(),
                 reason: rm_err.to_string(),
             }),
         )
