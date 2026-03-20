@@ -31,14 +31,36 @@ pub enum Error {
     #[error("docker network rm failed: {source}")]
     NetworkRm { source: std::io::Error },
 
+    #[error("docker network rm failed with exit code {code}: {stderr}")]
+    NetworkRmFailed { code: i32, stderr: String },
+
+    #[error("docker network rm failed (killed by signal)")]
+    NetworkRmKilled,
+
     #[error("docker rm failed: {source}")]
     Rm { source: std::io::Error },
+
+    #[error("docker rm failed with exit code {code}: {stderr}")]
+    RmFailed { code: i32, stderr: String },
+
+    #[error("docker rm failed (killed by signal)")]
+    RmKilled,
 
     #[error("docker stop failed for {name}: {source}")]
     Stop {
         name: String,
         source: std::io::Error,
     },
+
+    #[error("docker stop failed for {name} with exit code {code}: {stderr}")]
+    StopFailed {
+        name: String,
+        code: i32,
+        stderr: String,
+    },
+
+    #[error("docker stop failed for {name} (killed by signal)")]
+    StopKilled { name: String },
 }
 
 pub struct RunConfig<'cfg> {
@@ -168,21 +190,45 @@ pub async fn stop(binary: &str, name: &str, timeout_secs: Option<u64>) -> Result
         cmd.arg("--time").arg(secs.to_string());
     }
     cmd.arg(name);
-    let _output = cmd.output().await.map_err(|source| Error::Stop {
+    let output = cmd.output().await.map_err(|source| Error::Stop {
         name: name.to_string(),
         source,
     })?;
+
+    if !output.status.success() {
+        let Some(code) = output.status.code() else {
+            return Err(Error::StopKilled {
+                name: name.to_string(),
+            });
+        };
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(Error::StopFailed {
+            name: name.to_string(),
+            code,
+            stderr,
+        });
+    }
+
     Ok(())
 }
 
 pub async fn rm(binary: &str, name: &str) -> Result<(), Error> {
-    let _output = process::Command::new(binary)
+    let output = process::Command::new(binary)
         .arg("rm")
         .arg("--force")
         .arg(name)
         .output()
         .await
         .map_err(|source| Error::Rm { source })?;
+
+    if !output.status.success() {
+        let Some(code) = output.status.code() else {
+            return Err(Error::RmKilled);
+        };
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(Error::RmFailed { code, stderr });
+    }
+
     Ok(())
 }
 
@@ -207,12 +253,23 @@ pub async fn network_create(binary: &str, name: &str) -> Result<(), Error> {
 }
 
 pub async fn network_rm(binary: &str, name: &str) -> Result<(), Error> {
-    let _output = process::Command::new(binary)
+    let output = process::Command::new(binary)
         .arg("network")
         .arg("rm")
         .arg(name)
         .output()
         .await
         .map_err(|source| Error::NetworkRm { source })?;
-    Ok(())
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let is_real_failure = !output.status.success() && !stderr.contains("not found");
+
+    if is_real_failure {
+        match output.status.code() {
+            Some(code) => Err(Error::NetworkRmFailed { code, stderr }),
+            None => Err(Error::NetworkRmKilled),
+        }
+    } else {
+        Ok(())
+    }
 }
