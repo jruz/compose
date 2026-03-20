@@ -31,6 +31,7 @@ pub async fn setup(
             name: binary.to_string(),
         }),
     )?;
+    remove_containers(binary, config, start_order, &network, display_tx).await;
     docker::network_rm(binary, &network).await?;
     docker::network_create(binary, &network).await?;
     build_actor::build(binary, config, start_order, &network, display_tx).await?;
@@ -38,6 +39,32 @@ pub async fn setup(
 }
 
 pub async fn cleanup(
+    binary: &str,
+    config: &config::Config,
+    start_order: &[String],
+    network: &str,
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+) {
+    remove_containers(binary, config, start_order, network, display_tx).await;
+
+    if let Err(_send_err) = send_display(
+        display_tx,
+        message::DisplayMsg::Docker(message::DockerMsg::RemovingNetwork {
+            name: binary.to_string(),
+        }),
+    ) {}
+    if let Err(rm_err) = docker::network_rm(binary, network).await
+        && let Err(_send_err) = send_display(
+            display_tx,
+            message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
+                name: binary.to_string(),
+                reason: rm_err.to_string(),
+            }),
+        )
+    {}
+}
+
+async fn remove_containers(
     binary: &str,
     config: &config::Config,
     start_order: &[String],
@@ -55,42 +82,28 @@ pub async fn cleanup(
         .cloned()
         .collect();
 
-    if !docker_names.is_empty() {
-        if let Err(_send_err) = send_display(
-            display_tx,
-            message::DisplayMsg::Docker(message::DockerMsg::RemovingContainers {
-                name: binary.to_string(),
-            }),
-        ) {}
-        for name in &docker_names {
-            let container = docker::container_name(network, name);
-            if let Err(rm_err) = docker::rm(binary, &container).await
-                && let Err(_send_err) = send_display(
-                    display_tx,
-                    message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
-                        name: binary.to_string(),
-                        reason: rm_err.to_string(),
-                    }),
-                )
-            {}
-        }
+    if docker_names.is_empty() {
+        return;
     }
 
     if let Err(_send_err) = send_display(
         display_tx,
-        message::DisplayMsg::Docker(message::DockerMsg::RemovingNetwork {
+        message::DisplayMsg::Docker(message::DockerMsg::RemovingContainers {
             name: binary.to_string(),
         }),
     ) {}
-    if let Err(rm_err) = docker::network_rm(binary, network).await
-        && let Err(_send_err) = send_display(
-            display_tx,
-            message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
-                name: binary.to_string(),
-                reason: rm_err.to_string(),
-            }),
-        )
-    {}
+    for name in &docker_names {
+        let container = docker::container_name(network, name);
+        if let Err(rm_err) = docker::rm(binary, &container).await
+            && let Err(_send_err) = send_display(
+                display_tx,
+                message::DisplayMsg::Docker(message::DockerMsg::CleanupError {
+                    name: binary.to_string(),
+                    reason: rm_err.to_string(),
+                }),
+            )
+        {}
+    }
 }
 
 fn generate_network_name(project_name: Option<&str>) -> String {
