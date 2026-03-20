@@ -51,7 +51,7 @@ pub async fn run(
     let (display_tx, display_rx) = mpsc::unbounded_channel();
     let (notify_tx, notify_rx) = mpsc::unbounded_channel();
     let translator_handle = spawn_translator(notify_rx, display_tx.clone());
-    let _formatter = formatter::spawn_task(&names, display_rx, log_tx)?;
+    let formatter_handle = formatter::spawn_task(&names, display_rx, log_tx)?;
 
     let start_order = startup::resolve_start_order(&config);
     let shutdown = resolve_shutdown(&mode, &start_order)?;
@@ -95,6 +95,8 @@ pub async fn run(
     drop(notify_tx);
     drop(channels);
     drop(translator_handle.await);
+    drop(display_tx);
+    drop(formatter_handle.await);
     result
 }
 
