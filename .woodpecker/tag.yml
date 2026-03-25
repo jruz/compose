@@ -9,12 +9,12 @@ when:
 
 steps:
   - name: AUTO_TAG
-    image: alpine/git:v2.52.0
+    image: bash
     environment:
       CODEBERG_TOKEN:
         from_secret: CODEBERG_TOKEN
     commands:
-      - git remote set-url origin "https://token:$${CODEBERG_TOKEN}@codeberg.org/$${CI_REPO}.git"
+      - git remote set-url origin "https://token:$${CODEBERG_TOKEN}@codeberg.org/${CI_REPO}.git"
       - VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
       - TAG="v$VERSION"
       - |
