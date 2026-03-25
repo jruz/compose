@@ -3,27 +3,26 @@ when:
 
 steps:
   - name: BUILD_LINUX
-    image: ghcr.io/rust-cross/cargo-zigbuild:0.21.4
+    image: bash
     environment:
-      REVISION: $${CI_COMMIT_SHA}
+      REVISION: ${CI_COMMIT_SHA}
     commands:
-      - scripts/release-build.sh unknown-linux-gnu x86_64
-      - scripts/release-build.sh unknown-linux-gnu aarch64
+      - scripts/release-build.sh unknown-linux-musl x86_64
+      - scripts/release-build.sh unknown-linux-musl aarch64
 
   - name: BUILD_MACOS
-    image: ghcr.io/rust-cross/cargo-zigbuild:0.21.4
+    image: bash
     environment:
-      REVISION: $${CI_COMMIT_SHA}
+      REVISION: ${CI_COMMIT_SHA}
     commands:
       - scripts/release-build.sh apple-darwin x86_64
       - scripts/release-build.sh apple-darwin aarch64
 
   - name: RELEASE
-    image: 127.0.0.1:5000/woodpecker-job:v0.0.17
+    image: bash
     environment:
       CODEBERG_TOKEN:
         from_secret: CODEBERG_TOKEN
     commands:
-      - ls -la $${CI_REPO_NAME}-*
-      - . /entrypoint.sh
-      - nix develop --command just release-upload $${CI_COMMIT_TAG}
+      - ls -la ${CI_REPO_NAME}-*
+      - nix develop --command just release-upload ${CI_COMMIT_TAG}
