@@ -1,0 +1,13 @@
+processes:
+  service:
+    command: "exec sleep 10"
+    env:
+      CHECK_DIR: /tmp
+    health:
+      exec: ["test", "-d", "${CHECK_DIR}"]
+      interval_secs: 1
+      timeout_secs: 3
+
+  consumer:
+    command: "echo consumer-started && exit 0"
+    depends_on: [service]

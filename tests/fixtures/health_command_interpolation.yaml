@@ -1,0 +1,13 @@
+processes:
+  service:
+    command: "touch /tmp/compose-test-health-cmd && exec sleep 10"
+    env:
+      MARKER: /tmp/compose-test-health-cmd
+    health:
+      command: 'test -f "${MARKER}"'
+      interval_secs: 1
+      timeout_secs: 3
+
+  consumer:
+    command: "echo consumer-started && exit 0"
+    depends_on: [service]

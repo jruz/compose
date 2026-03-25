@@ -362,6 +362,21 @@ async fn start_service(
     }
 }
 
+fn expand_health(
+    hc: &config::HealthCheck,
+    env: &std::collections::BTreeMap<String, String>,
+) -> config::HealthCheck {
+    config::HealthCheck {
+        command: hc.command.as_ref().map(|cmd| env::expand_vars(cmd, env)),
+        exec: hc
+            .exec
+            .as_ref()
+            .map(|args| args.iter().map(|arg| env::expand_vars(arg, env)).collect()),
+        interval_secs: hc.interval_secs,
+        timeout_secs: hc.timeout_secs,
+    }
+}
+
 fn spawn_process_actor(
     name: &str,
     proc_def: &config::ProcessDef,
@@ -370,6 +385,15 @@ fn spawn_process_actor(
     network: Option<&str>,
     channels: &Channels<'_>,
 ) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
+    let expanded_health = proc_def.health.as_ref().map(|hc| expand_health(hc, env));
+    let expanded_command = proc_def
+        .command
+        .as_ref()
+        .map(|cmd| env::expand_vars(cmd, env));
+    let expanded_exec: Option<Vec<String>> = proc_def
+        .exec
+        .as_ref()
+        .map(|args| args.iter().map(|arg| env::expand_vars(arg, env)).collect());
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
         let image = docker::image_tag(net, name, docker_config.image.as_deref());
         let ports: Vec<String> = docker_config
@@ -384,10 +408,10 @@ fn spawn_process_actor(
             .collect();
         let run_config = docker_actor::RunConfig {
             binary: channels.binary,
-            command: proc_def.command.as_deref(),
+            command: expanded_command.as_deref(),
             env,
-            exec: proc_def.exec.as_deref(),
-            health: proc_def.health.as_ref(),
+            exec: expanded_exec.as_deref(),
+            health: expanded_health.as_ref(),
             image: &image,
             name,
             network: net,
@@ -402,17 +426,15 @@ fn spawn_process_actor(
         )?;
         Ok(cmd_tx)
     } else {
-        let Some(command) = &proc_def.command else {
-            return Err(Error::MissingCommand {
-                name: name.to_string(),
-            });
-        };
+        let expanded_command = expanded_command.ok_or_else(|| Error::MissingCommand {
+            name: name.to_string(),
+        })?;
         let cmd_tx = process::spawn_actor(
             name,
-            command,
+            &expanded_command,
             shell,
             env,
-            proc_def.health.as_ref(),
+            expanded_health.as_ref(),
             channels.events.clone(),
             channels.output.clone(),
         )?;

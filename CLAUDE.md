@@ -40,9 +40,10 @@ When adding or changing config fields or features, update all three places:
 
 ```yaml
 runtime: docker | podman         # optional, default: docker
+shell: <string>                  # optional, default: sh
 processes:
   <name>:
-    command: <string>             # exec driver
+    command: <string>             # exec driver, supports ${VAR} interpolation
     docker:                       # docker driver (alternative to command)
       image: <string>             # required if no build
       build: <path>               # build context
@@ -56,8 +57,12 @@ processes:
       KEY: "VALUE"
     env_file: <path>              # optional, KEY=VALUE format
     health:                       # optional (not allowed on oneshot)
-      command: <string>           # shell health check
-      exec: [<string>, ...]       # exec health check (alternative to command)
+      command: <string>           # shell health check, supports ${VAR} interpolation
+      exec: [<string>, ...]       # exec health check, supports ${VAR} interpolation
       interval_secs: <int>
       timeout_secs: <int>
 ```
+
+### Variable Interpolation
+
+All string values support `${VAR}` interpolation from resolved env vars (inline env, env_file, --env-file) and host environment. Applies to: `command`, `exec`, `ports`, `volumes`, `health.command`, `health.exec`. Undefined variables stay literal.

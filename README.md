@@ -187,15 +187,27 @@ With sops-encrypted secrets via process substitution:
 compose run --config compose.yaml --env-file <(sops --decrypt secrets.env)
 ```
 
-Variable interpolation with `${VAR}` in env values:
+Variable interpolation with `${VAR}` — all string values support interpolation from resolved env vars and host environment:
 
 ```yaml
 processes:
   app:
-    command: "node server.js"
+    docker:
+      build: .
+      ports:
+        - "${APP_PORT}:${APP_PORT}"
+    command: "node server.js --port ${APP_PORT}"
     env:
+      APP_PORT: "3000"
       DATABASE_URL: "postgres://user:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
+    health:
+      exec: ["curl", "--fail", "http://localhost:${APP_PORT}/health"]
+      interval_secs: 1
+      timeout_secs: 10
 ```
+
+Applies to: `command`, `exec`, `ports`, `volumes`, `health.command`, `health.exec`, and `env` values.
+Undefined variables stay literal: `${UNKNOWN}` remains `${UNKNOWN}`.
 
 Precedence: process env > env file > host environment.
 
@@ -207,8 +219,8 @@ shell: <string> # shell for exec processes (default: sh)
 processes:
   <name>:
     type: <service|oneshot> # process type (default: service)
-    command: <string> # shell command (exec) or container CMD override (docker)
-    exec: [<string>, ...] # container CMD override, exec form (docker only)
+    command: <string> # shell command (exec) or container CMD override (docker), supports ${VAR}
+    exec: [<string>, ...] # container CMD override, exec form (docker only), supports ${VAR}
     docker: # presence of this section makes it a docker process
       image: <string> # docker image (required if no build)
       build: <string> # build context path (required if no image)
@@ -221,8 +233,8 @@ processes:
       KEY: "VALUE"
     env_file: <path> # KEY=VALUE format, applied to this process
     health: # health check (one of command or exec)
-      command: <string> # shell command (exit 0 = healthy)
-      exec: [<string>, ...] # direct execution without shell
+      command: <string> # shell command (exit 0 = healthy), supports ${VAR}
+      exec: [<string>, ...] # direct execution without shell, supports ${VAR}
       interval_secs: <int> # seconds between retries
       timeout_secs: <int> # seconds before giving up
 ```
