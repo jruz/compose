@@ -38,7 +38,14 @@ Config schema:
         command: <string>             # health check shell command
         exec: [<string>, ...]         # health check exec form (no shell)
         interval_secs: <int>          # seconds between retries
-        timeout_secs: <int>           # seconds before giving up"
+        timeout_secs: <int>           # seconds before giving up
+
+Variable interpolation:
+
+  All string values support ${VAR} interpolation from resolved env vars
+  (inline env, env_file, --env-file) and host environment.
+  Applies to: command, exec, ports, volumes, health.command, health.exec.
+  Undefined variables stay literal: ${UNKNOWN} remains ${UNKNOWN}."
 )]
 pub struct Cli {
     #[command(subcommand)]

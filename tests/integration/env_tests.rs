@@ -172,3 +172,19 @@ fn env_precedence_chain() {
     assert_stdout_contains(&output, "PROC_ONLY=proc-val");
     assert_stdout_contains(&output, "INLINE_ONLY=inline-val");
 }
+
+#[test]
+fn health_command_interpolation() {
+    let output = run_fixture("health_command_interpolation.yaml", "run");
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "healthy");
+    assert_stdout_contains(&output, "consumer-started");
+}
+
+#[test]
+fn health_exec_interpolation() {
+    let output = run_fixture("health_exec_interpolation.yaml", "run");
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "healthy");
+    assert_stdout_contains(&output, "consumer-started");
+}

@@ -86,6 +86,10 @@ example-fail:
     cargo build --release
     ./target/release/compose run --config examples/compose.fail.yaml
 
+example-docker-run:
+    cargo build --release
+    ./target/release/compose run --config examples/compose.docker-run.yaml
+
 example-docker-fail:
     cargo build --release
     ./target/release/compose run --config examples/compose.docker-fail.yaml
