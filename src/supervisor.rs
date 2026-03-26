@@ -115,10 +115,10 @@ fn display_names(config: &config::Config, has_docker: bool, runtime_label: &str)
 
 async fn run_lifecycle(
     startup_result: startup::StartupResult,
-    event_tx: mpsc::UnboundedSender<message::ActorEvent>,
+    event_tx: mpsc::UnboundedSender<message::ActorExited>,
     shutdown: lifecycle::ShutdownStrategy,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-    event_rx: mpsc::UnboundedReceiver<message::ActorEvent>,
+    event_rx: mpsc::UnboundedReceiver<message::ActorExited>,
     actors: &[message::ActorHandle],
 ) -> Result<message::ExitResult, Error> {
     match startup_result {

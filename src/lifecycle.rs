@@ -6,9 +6,6 @@ use crate::shutdown;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("{name}: {reason}")]
-    HealthFailed { name: String, reason: String },
-
     #[error(transparent)]
     Shutdown(#[from] shutdown::Error),
 
@@ -25,14 +22,14 @@ pub async fn manage(
     actors: &[message::ActorHandle],
     shutdown: ShutdownStrategy,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-    mut event_rx: mpsc::UnboundedReceiver<message::ActorEvent>,
+    mut event_rx: mpsc::UnboundedReceiver<message::ActorExited>,
 ) -> Result<message::ExitResult, Error> {
     let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
         .map_err(|source| Error::SignalHandler { source })?;
 
     tokio::select! {
-        Some(event) = event_rx.recv() => {
-            handle_event(event, &shutdown, actors, display_tx)
+        Some(exited) = event_rx.recv() => {
+            handle_exited(exited, &shutdown, actors, display_tx)
         }
         Some(()) = sigterm.recv() => {
             shutdown::emit_killing_all(actors, None, "signal received", display_tx)?;
@@ -48,67 +45,52 @@ pub async fn manage(
     }
 }
 
-fn handle_event(
-    event: message::ActorEvent,
+fn handle_exited(
+    exited: message::ActorExited,
     shutdown: &ShutdownStrategy,
     actors: &[message::ActorHandle],
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<message::ExitResult, Error> {
-    match event {
-        message::ActorEvent::Exited {
-            name,
-            code,
-            stderr_lines,
-        } => match shutdown {
-            ShutdownStrategy::MainProcess(main_name) if *main_name == name => {
-                send_lifecycle(
-                    display_tx,
-                    message::LifecycleMsg::Exited {
-                        name: name.clone(),
-                        code,
-                    },
-                )?;
-                shutdown::emit_killing_all(
-                    actors,
-                    Some(&name),
-                    &format!("{name} exited"),
-                    display_tx,
-                )?;
-                shutdown::kill_all(actors);
-                let failed_name = if code == 0 { None } else { Some(name) };
-                Ok(message::ExitResult { code, failed_name })
-            }
-            ShutdownStrategy::MainProcess(_) | ShutdownStrategy::AnyExit => {
-                send_crashed(display_tx, &name, code, &stderr_lines)?;
-                shutdown::emit_killing_all(
-                    actors,
-                    Some(&name),
-                    &format!("{name} crashed"),
-                    display_tx,
-                )?;
-                shutdown::kill_all(actors);
-                Ok(message::ExitResult {
-                    code: 1,
-                    failed_name: Some(name),
-                })
-            }
-        },
-        message::ActorEvent::HealthFailed { name, reason } => {
+    match shutdown {
+        ShutdownStrategy::MainProcess(main_name) if *main_name == exited.name => {
             send_lifecycle(
                 display_tx,
-                message::LifecycleMsg::HealthFailed {
-                    name: name.clone(),
-                    reason: reason.clone(),
+                message::LifecycleMsg::Exited {
+                    code: exited.code,
+                    name: exited.name.clone(),
                 },
             )?;
-            shutdown::emit_killing_all(actors, None, &format!("{name} health failed"), display_tx)?;
+            shutdown::emit_killing_all(
+                actors,
+                Some(&exited.name),
+                &format!("{} exited", exited.name),
+                display_tx,
+            )?;
             shutdown::kill_all(actors);
-            Err(Error::HealthFailed { name, reason })
+            let failed_name = if exited.code == 0 {
+                None
+            } else {
+                Some(exited.name)
+            };
+            Ok(message::ExitResult {
+                code: exited.code,
+                failed_name,
+            })
         }
-        message::ActorEvent::Healthy { .. } => Ok(message::ExitResult {
-            code: 0,
-            failed_name: None,
-        }),
+        ShutdownStrategy::MainProcess(_) | ShutdownStrategy::AnyExit => {
+            send_crashed(display_tx, &exited.name, exited.code, &exited.stderr_lines)?;
+            shutdown::emit_killing_all(
+                actors,
+                Some(&exited.name),
+                &format!("{} crashed", exited.name),
+                display_tx,
+            )?;
+            shutdown::kill_all(actors);
+            Ok(message::ExitResult {
+                code: 1,
+                failed_name: Some(exited.name),
+            })
+        }
     }
 }
 
@@ -128,8 +110,8 @@ fn send_crashed(
     send_lifecycle(
         display_tx,
         message::LifecycleMsg::Crashed {
-            name: name.to_string(),
             code,
+            name: name.to_string(),
         },
     )?;
     if !stderr_lines.is_empty() {

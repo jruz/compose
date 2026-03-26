@@ -1,17 +1,8 @@
 #[derive(Debug)]
-pub enum ActorEvent {
-    Exited {
-        code: u8,
-        name: String,
-        stderr_lines: Vec<String>,
-    },
-    HealthFailed {
-        name: String,
-        reason: String,
-    },
-    Healthy {
-        name: String,
-    },
+pub struct ActorExited {
+    pub code: u8,
+    pub name: String,
+    pub stderr_lines: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -87,15 +78,13 @@ pub struct ActorHandle {
     pub name: String,
 }
 
-impl ActorHandle {
-    pub fn kill(&self) {
-        drop(self.cmd_tx.send(Command::Kill));
-    }
-}
-
 pub struct ExitResult {
     pub code: u8,
     pub failed_name: Option<String>,
+}
+
+pub fn kill_actor(actor: &ActorHandle) {
+    drop(actor.cmd_tx.send(Command::Kill));
 }
 
 pub fn display_msg_name(msg: &DisplayMsg) -> &str {

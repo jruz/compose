@@ -6,31 +6,11 @@ use nix::unistd::Pid;
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::config;
 use crate::docker;
 use crate::message;
 
 const GRACEFUL_SHUTDOWN_SECS: u64 = 2;
 const STDERR_BUFFER_LINES: usize = 20;
-
-pub enum HealthCommand {
-    Exec(Vec<String>),
-    Shell(String),
-}
-
-pub struct HealthConfig {
-    pub command: HealthCommand,
-    pub interval: Duration,
-    pub timeout: Duration,
-}
-
-enum HealthOutcome {
-    CommandFailed(String),
-    Healthy,
-    Killed,
-    ProcessExited(Result<std::process::ExitStatus, std::io::Error>),
-    TimedOut(String),
-}
 
 pub enum Driver {
     Docker {
@@ -43,26 +23,13 @@ pub enum Driver {
 
 pub struct ActorChannels {
     pub cmd_rx: mpsc::UnboundedReceiver<message::Command>,
-    pub event_tx: mpsc::UnboundedSender<message::ActorEvent>,
+    pub event_tx: mpsc::UnboundedSender<message::ActorExited>,
 }
 
 pub struct OutputDrain {
     stderr_done: oneshot::Receiver<()>,
     stderr_rx: mpsc::UnboundedReceiver<String>,
     stdout_done: oneshot::Receiver<()>,
-}
-
-pub fn parse_health_config(hc: &config::HealthCheck) -> HealthConfig {
-    let command = match (&hc.command, &hc.exec) {
-        (Some(shell_cmd), _) => HealthCommand::Shell(shell_cmd.clone()),
-        (_, Some(exec)) => HealthCommand::Exec(exec.clone()),
-        (None, None) => HealthCommand::Shell(String::new()),
-    };
-    HealthConfig {
-        command,
-        interval: Duration::from_secs(hc.interval_secs),
-        timeout: Duration::from_secs(hc.timeout_secs),
-    }
 }
 
 pub fn setup_output_drain(
@@ -104,8 +71,8 @@ pub fn setup_output_drain(
                         }
                         if let Err(_send_err) =
                             display_tx.send(message::DisplayMsg::Output(message::OutputMsg::Line {
-                                name: proc_name.clone(),
                                 line,
+                                name: proc_name.clone(),
                             }))
                         {
                             break;
@@ -115,8 +82,8 @@ pub fn setup_output_drain(
                     Err(err) => {
                         if let Err(_send_err) =
                             display_tx.send(message::DisplayMsg::Output(message::OutputMsg::Line {
-                                name: proc_name.clone(),
                                 line: format!("[pipe error: {err}]"),
+                                name: proc_name.clone(),
                             }))
                         {}
                         break;
@@ -134,8 +101,8 @@ pub fn setup_output_drain(
     }
 
     OutputDrain {
-        stderr_rx: stderr_cap_rx,
         stderr_done: stderr_done_rx,
+        stderr_rx: stderr_cap_rx,
         stdout_done: stdout_done_rx,
     }
 }
@@ -144,7 +111,6 @@ pub async fn actor_loop(
     name: String,
     mut child: tokio::process::Child,
     channels: ActorChannels,
-    health: Option<HealthConfig>,
     drain: OutputDrain,
     driver: Driver,
 ) {
@@ -158,53 +124,6 @@ pub async fn actor_loop(
         stdout_done,
         stderr_done,
     } = drain;
-
-    if let Some(hc) = health {
-        match run_health_check(&hc, &mut child, &mut cmd_rx, &driver).await {
-            HealthOutcome::Healthy => {}
-            HealthOutcome::TimedOut(last_stderr) => {
-                kill_process(&driver, &mut child).await;
-                if let Err(_send_err) = event_tx.send(message::ActorEvent::HealthFailed {
-                    name: name.clone(),
-                    reason: format!("health check timed out, last stderr: {last_stderr}"),
-                }) {}
-                return;
-            }
-            HealthOutcome::ProcessExited(_status) => {
-                if let Err(_recv_err) = stdout_done.await {}
-                if let Err(_recv_err) = stderr_done.await {}
-                let stderr = drain_stderr(&mut stderr_rx).await;
-                let reason = if stderr.is_empty() {
-                    "exited before becoming healthy".to_string()
-                } else {
-                    format!(
-                        "exited before becoming healthy, last stderr: {}",
-                        stderr.join("; ")
-                    )
-                };
-                if let Err(_send_err) = event_tx.send(message::ActorEvent::HealthFailed {
-                    name: name.clone(),
-                    reason,
-                }) {}
-                return;
-            }
-            HealthOutcome::Killed => {
-                kill_process(&driver, &mut child).await;
-                return;
-            }
-            HealthOutcome::CommandFailed(err) => {
-                if let Err(_send_err) = event_tx.send(message::ActorEvent::HealthFailed {
-                    name: name.clone(),
-                    reason: format!("health check command failed: {err}"),
-                }) {}
-                return;
-            }
-        }
-    }
-
-    if let Err(_send_err) = event_tx.send(message::ActorEvent::Healthy { name: name.clone() }) {
-        return;
-    }
 
     let status = tokio::select! {
         Some(message::Command::Kill) = cmd_rx.recv() => {
@@ -225,55 +144,11 @@ pub async fn actor_loop(
     let code = exit_code_from_status(status);
     let stderr_lines = drain_stderr(&mut stderr_rx).await;
 
-    if let Err(_send_err) = event_tx.send(message::ActorEvent::Exited {
-        name: name.clone(),
+    drop(event_tx.send(message::ActorExited {
         code,
+        name,
         stderr_lines,
-    }) {}
-}
-
-async fn run_health_check(
-    hc: &HealthConfig,
-    child: &mut tokio::process::Child,
-    cmd_rx: &mut mpsc::UnboundedReceiver<message::Command>,
-    driver: &Driver,
-) -> HealthOutcome {
-    let deadline = tokio::time::Instant::now() + hc.timeout;
-
-    loop {
-        let check_result = tokio::select! {
-            result = check_health(driver, &hc.command) => result,
-            status = child.wait() => {
-                return HealthOutcome::ProcessExited(status);
-            }
-            Some(message::Command::Kill) = cmd_rx.recv() => {
-                return HealthOutcome::Killed;
-            }
-        };
-
-        match check_result {
-            Ok(output) if output.status.success() => return HealthOutcome::Healthy,
-            Ok(output) => {
-                if tokio::time::Instant::now() >= deadline {
-                    let last_stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                    return HealthOutcome::TimedOut(last_stderr);
-                }
-            }
-            Err(err) => {
-                return HealthOutcome::CommandFailed(err);
-            }
-        }
-
-        tokio::select! {
-            () = tokio::time::sleep(hc.interval) => {}
-            status = child.wait() => {
-                return HealthOutcome::ProcessExited(status);
-            }
-            Some(message::Command::Kill) = cmd_rx.recv() => {
-                return HealthOutcome::Killed;
-            }
-        }
-    }
+    }));
 }
 
 async fn kill_process(driver: &Driver, child: &mut tokio::process::Child) {
@@ -284,52 +159,6 @@ async fn kill_process(driver: &Driver, child: &mut tokio::process::Child) {
             container,
             stop_timeout_secs,
         } => if let Err(_stop_err) = docker::stop(binary, container, *stop_timeout_secs).await {},
-    }
-}
-
-async fn check_health(
-    driver: &Driver,
-    cmd: &HealthCommand,
-) -> Result<std::process::Output, String> {
-    match driver {
-        Driver::Exec => run_exec_health(cmd).await.map_err(|err| err.to_string()),
-        Driver::Docker {
-            binary, container, ..
-        } => run_docker_health(binary, container, cmd)
-            .await
-            .map_err(|err| err.to_string()),
-    }
-}
-
-async fn run_exec_health(cmd: &HealthCommand) -> std::io::Result<std::process::Output> {
-    match cmd {
-        HealthCommand::Shell(shell_cmd) => {
-            tokio::process::Command::new("sh")
-                .arg("-c")
-                .arg(shell_cmd)
-                .output()
-                .await
-        }
-        HealthCommand::Exec(args) => {
-            let (program, rest) = args.split_first().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "exec args empty")
-            })?;
-            tokio::process::Command::new(program)
-                .args(rest)
-                .output()
-                .await
-        }
-    }
-}
-
-async fn run_docker_health(
-    binary: &str,
-    container: &str,
-    cmd: &HealthCommand,
-) -> Result<std::process::Output, docker::Error> {
-    match cmd {
-        HealthCommand::Shell(shell_cmd) => docker::exec_shell(binary, container, shell_cmd).await,
-        HealthCommand::Exec(args) => docker::exec_check(binary, container, args).await,
     }
 }
 
@@ -390,8 +219,8 @@ pub async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
             Ok(Some(line)) => {
                 if let Err(_send_err) =
                     display_tx.send(message::DisplayMsg::Output(message::OutputMsg::Line {
-                        name: name.to_string(),
                         line,
+                        name: name.to_string(),
                     }))
                 {
                     break;
@@ -401,8 +230,8 @@ pub async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
             Err(err) => {
                 if let Err(_send_err) =
                     display_tx.send(message::DisplayMsg::Output(message::OutputMsg::Line {
-                        name: name.to_string(),
                         line: format!("[pipe error: {err}]"),
+                        name: name.to_string(),
                     }))
                 {}
                 break;
