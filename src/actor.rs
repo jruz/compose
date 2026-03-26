@@ -43,7 +43,7 @@ pub enum Driver {
 
 pub struct ActorChannels {
     pub cmd_rx: mpsc::UnboundedReceiver<message::Command>,
-    pub event_tx: mpsc::UnboundedSender<message::Event>,
+    pub event_tx: mpsc::UnboundedSender<message::ActorEvent>,
 }
 
 pub struct OutputDrain {
@@ -164,7 +164,7 @@ pub async fn actor_loop(
             HealthOutcome::Healthy => {}
             HealthOutcome::TimedOut(last_stderr) => {
                 kill_process(&driver, &mut child).await;
-                if let Err(_send_err) = event_tx.send(message::Event::HealthFailed {
+                if let Err(_send_err) = event_tx.send(message::ActorEvent::HealthFailed {
                     name: name.clone(),
                     reason: format!("health check timed out, last stderr: {last_stderr}"),
                 }) {}
@@ -182,7 +182,7 @@ pub async fn actor_loop(
                         stderr.join("; ")
                     )
                 };
-                if let Err(_send_err) = event_tx.send(message::Event::HealthFailed {
+                if let Err(_send_err) = event_tx.send(message::ActorEvent::HealthFailed {
                     name: name.clone(),
                     reason,
                 }) {}
@@ -193,7 +193,7 @@ pub async fn actor_loop(
                 return;
             }
             HealthOutcome::CommandFailed(err) => {
-                if let Err(_send_err) = event_tx.send(message::Event::HealthFailed {
+                if let Err(_send_err) = event_tx.send(message::ActorEvent::HealthFailed {
                     name: name.clone(),
                     reason: format!("health check command failed: {err}"),
                 }) {}
@@ -202,7 +202,7 @@ pub async fn actor_loop(
         }
     }
 
-    if let Err(_send_err) = event_tx.send(message::Event::Healthy { name: name.clone() }) {
+    if let Err(_send_err) = event_tx.send(message::ActorEvent::Healthy { name: name.clone() }) {
         return;
     }
 
@@ -225,7 +225,7 @@ pub async fn actor_loop(
     let code = exit_code_from_status(status);
     let stderr_lines = drain_stderr(&mut stderr_rx).await;
 
-    if let Err(_send_err) = event_tx.send(message::Event::Exited {
+    if let Err(_send_err) = event_tx.send(message::ActorEvent::Exited {
         name: name.clone(),
         code,
         stderr_lines,

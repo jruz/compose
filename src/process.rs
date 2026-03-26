@@ -22,7 +22,7 @@ pub fn spawn_actor(
     shell: &str,
     env: &BTreeMap<String, String>,
     health: Option<&config::HealthCheck>,
-    event_tx: mpsc::UnboundedSender<message::Event>,
+    event_tx: mpsc::UnboundedSender<message::ActorEvent>,
     display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<message::ActorHandle, Error> {
     let mut std_cmd = std::process::Command::new(shell);
