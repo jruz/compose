@@ -10,7 +10,7 @@ pub enum Error {
 
 pub fn kill_all(actors: &[message::ActorHandle]) {
     for actor in actors {
-        actor.kill();
+        message::kill_actor(actor);
     }
 }
 

@@ -1,11 +1,13 @@
 use std::collections::{BTreeMap, HashSet};
 
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 
 use crate::config;
 use crate::docker;
 use crate::docker_actor;
 use crate::env;
+use crate::health;
 use crate::message;
 use crate::process;
 use crate::shutdown;
@@ -40,7 +42,7 @@ pub enum Error {
 pub struct Channels<'cfg> {
     pub binary: &'cfg str,
     pub display: mpsc::UnboundedSender<message::DisplayMsg>,
-    pub events: mpsc::UnboundedSender<message::ActorEvent>,
+    pub events: mpsc::UnboundedSender<message::ActorExited>,
 }
 
 pub enum StartupResult {
@@ -105,7 +107,7 @@ pub async fn start_all(
     start_order: &[String],
     global_env: &BTreeMap<String, String>,
     channels: &Channels<'_>,
-    event_rx: &mut mpsc::UnboundedReceiver<message::ActorEvent>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorExited>,
     network: Option<&str>,
 ) -> Result<(StartupResult, Vec<message::ActorHandle>), Error> {
     let shell = match &config.shell {
@@ -154,14 +156,16 @@ pub async fn start_all(
         } else {
             actors.push(actor);
 
-            if proc_def.health.is_some() {
+            let health_info = build_health_info(proc_def, &env, name, network, channels.binary);
+
+            if health_info.is_some() {
                 send_lifecycle(
                     &channels.display,
                     message::LifecycleMsg::WaitingHealth { name: name.clone() },
                 )?;
             }
 
-            match start_service(name, proc_def, &actors, event_rx, &channels.display).await? {
+            match start_service(name, health_info, &actors, event_rx, &channels.display).await? {
                 ServiceOutcome::Ready => {}
                 ServiceOutcome::CrashedDuringStartup { code, failed_name } => {
                     return Ok((
@@ -176,10 +180,31 @@ pub async fn start_all(
     Ok((StartupResult::Ready, actors))
 }
 
+fn build_health_info(
+    proc_def: &config::ProcessDef,
+    env: &BTreeMap<String, String>,
+    name: &str,
+    network: Option<&str>,
+    binary: &str,
+) -> Option<(health::HealthConfig, health::HealthDriver)> {
+    let hc = proc_def.health.as_ref()?;
+    let expanded = expand_health(hc, env);
+    let config = health::parse_config(&expanded);
+    let driver = if let Some(net) = network.filter(|_| proc_def.docker.is_some()) {
+        health::HealthDriver::Docker {
+            binary: binary.to_string(),
+            container: docker::container_name(net, name),
+        }
+    } else {
+        health::HealthDriver::Exec
+    };
+    Some((config, driver))
+}
+
 async fn handle_oneshot(
     name: &str,
     actors: &[message::ActorHandle],
-    event_rx: &mut mpsc::UnboundedReceiver<message::ActorEvent>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorExited>,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<Option<StartupResult>, Error> {
     send_lifecycle(
@@ -188,7 +213,7 @@ async fn handle_oneshot(
             name: name.to_string(),
         },
     )?;
-    match start_oneshot(name, actors, event_rx, display_tx).await? {
+    match start_oneshot(name, event_rx).await? {
         OneshotOutcome::Completed => {
             send_lifecycle(
                 display_tx,
@@ -231,111 +256,100 @@ async fn handle_oneshot(
 
 async fn start_oneshot(
     name: &str,
-    actors: &[message::ActorHandle],
-    event_rx: &mut mpsc::UnboundedReceiver<message::ActorEvent>,
-    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorExited>,
 ) -> Result<OneshotOutcome, Error> {
-    loop {
-        let event = event_rx.recv().await.ok_or(Error::EventChannelClosed)?;
-
-        match event {
-            message::ActorEvent::Exited {
-                name: event_name,
-                code,
-                stderr_lines,
-            } => {
-                if event_name == name {
-                    if code == 0 {
-                        return Ok(OneshotOutcome::Completed);
-                    }
-                    return Ok(OneshotOutcome::Failed { code });
-                }
-                return Ok(OneshotOutcome::OtherCrashed {
-                    crashed_name: event_name,
-                    code,
-                    stderr_lines,
-                });
-            }
-            message::ActorEvent::HealthFailed {
-                name: event_name,
-                reason,
-            } => {
-                send_lifecycle(
-                    display_tx,
-                    message::LifecycleMsg::HealthFailed {
-                        name: event_name.clone(),
-                        reason: reason.clone(),
-                    },
-                )?;
-                shutdown::kill_all(actors);
-                return Err(Error::HealthFailed {
-                    name: event_name,
-                    reason,
-                });
-            }
-            message::ActorEvent::Healthy { .. } => {}
+    let event = event_rx.recv().await.ok_or(Error::EventChannelClosed)?;
+    if event.name == name {
+        if event.code == 0 {
+            return Ok(OneshotOutcome::Completed);
         }
+        return Ok(OneshotOutcome::Failed { code: event.code });
     }
+    Ok(OneshotOutcome::OtherCrashed {
+        code: event.code,
+        crashed_name: event.name,
+        stderr_lines: event.stderr_lines,
+    })
 }
 
 async fn start_service(
     name: &str,
-    proc_def: &config::ProcessDef,
+    health_info: Option<(health::HealthConfig, health::HealthDriver)>,
     actors: &[message::ActorHandle],
-    event_rx: &mut mpsc::UnboundedReceiver<message::ActorEvent>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorExited>,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<ServiceOutcome, Error> {
-    loop {
-        let event = event_rx.recv().await.ok_or(Error::EventChannelClosed)?;
+    let Some((health_cfg, health_driver)) = health_info else {
+        return Ok(ServiceOutcome::Ready);
+    };
 
-        match &event {
-            message::ActorEvent::Healthy { name: event_name } if event_name == name => {
-                if proc_def.health.is_some() {
+    let deadline = Instant::now() + health_cfg.timeout;
+
+    loop {
+        tokio::select! {
+            event = event_rx.recv() => {
+                let event = event.ok_or(Error::EventChannelClosed)?;
+                if event.name == name {
+                    let reason = "exited before becoming healthy".to_string();
                     send_lifecycle(
                         display_tx,
-                        message::LifecycleMsg::Healthy {
+                        message::LifecycleMsg::HealthFailed {
                             name: name.to_string(),
+                            reason: reason.clone(),
                         },
                     )?;
+                    shutdown::kill_all(actors);
+                    return Err(Error::HealthFailed {
+                        name: name.to_string(),
+                        reason,
+                    });
                 }
-                return Ok(ServiceOutcome::Ready);
-            }
-            message::ActorEvent::HealthFailed {
-                name: event_name,
-                reason,
-            } => {
-                send_lifecycle(
-                    display_tx,
-                    message::LifecycleMsg::HealthFailed {
-                        name: event_name.clone(),
-                        reason: reason.clone(),
-                    },
-                )?;
-                shutdown::kill_all(actors);
-                return Err(Error::HealthFailed {
-                    name: event_name.clone(),
-                    reason: reason.clone(),
-                });
-            }
-            message::ActorEvent::Exited {
-                name: event_name,
-                code,
-                stderr_lines,
-            } if event_name != name => {
-                send_crashed(display_tx, event_name, *code, stderr_lines)?;
+                send_crashed(display_tx, &event.name, event.code, &event.stderr_lines)?;
                 shutdown::emit_killing_all(
                     actors,
-                    Some(event_name),
-                    &format!("{event_name} crashed"),
+                    Some(&event.name),
+                    &format!("{} crashed", event.name),
                     display_tx,
                 )?;
                 shutdown::kill_all(actors);
                 return Ok(ServiceOutcome::CrashedDuringStartup {
                     code: 1,
-                    failed_name: event_name.clone(),
+                    failed_name: event.name,
                 });
             }
-            message::ActorEvent::Exited { .. } | message::ActorEvent::Healthy { .. } => {}
+            () = tokio::time::sleep(health_cfg.interval) => {
+                match health::check(&health_driver, &health_cfg.command).await {
+                    Ok(output) if output.status.success() => {
+                        send_lifecycle(
+                            display_tx,
+                            message::LifecycleMsg::Healthy {
+                                name: name.to_string(),
+                            },
+                        )?;
+                        return Ok(ServiceOutcome::Ready);
+                    }
+                    _ => {
+                        if Instant::now() >= deadline {
+                            let reason = format!(
+                                "health check timed out after {}s",
+                                health_cfg.timeout.as_secs()
+                            );
+                            send_lifecycle(
+                                display_tx,
+                                message::LifecycleMsg::HealthFailed {
+                                    name: name.to_string(),
+                                    reason: reason.clone(),
+                                },
+                            )?;
+                            shutdown::kill_all(actors);
+                            return Err(Error::HealthFailed {
+                                name: name.to_string(),
+                                reason,
+                            });
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -363,7 +377,6 @@ fn spawn_process_actor(
     network: Option<&str>,
     channels: &Channels<'_>,
 ) -> Result<message::ActorHandle, Error> {
-    let expanded_health = proc_def.health.as_ref().map(|hc| expand_health(hc, env));
     let expanded_command = proc_def
         .command
         .as_ref()
@@ -389,7 +402,6 @@ fn spawn_process_actor(
             command: expanded_command.as_deref(),
             env,
             exec: expanded_exec.as_deref(),
-            health: expanded_health.as_ref(),
             image: &image,
             name,
             network: net,
@@ -411,7 +423,6 @@ fn spawn_process_actor(
             &expanded_command,
             shell,
             env,
-            expanded_health.as_ref(),
             channels.events.clone(),
             channels.display.clone(),
         )?)

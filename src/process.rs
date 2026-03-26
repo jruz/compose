@@ -4,7 +4,6 @@ use std::os::unix::process::CommandExt as _;
 use tokio::sync::mpsc;
 
 use crate::actor;
-use crate::config;
 use crate::message;
 
 #[derive(Debug, thiserror::Error)]
@@ -21,8 +20,7 @@ pub fn spawn_actor(
     command: &str,
     shell: &str,
     env: &BTreeMap<String, String>,
-    health: Option<&config::HealthCheck>,
-    event_tx: mpsc::UnboundedSender<message::ActorEvent>,
+    event_tx: mpsc::UnboundedSender<message::ActorExited>,
     display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<message::ActorHandle, Error> {
     let mut std_cmd = std::process::Command::new(shell);
@@ -46,7 +44,6 @@ pub fn spawn_actor(
     })?;
 
     let drain = actor::setup_output_drain(name, &mut spawned, display_tx);
-    let health_config = health.map(actor::parse_health_config);
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
     let actor_name = name.to_string();
@@ -55,7 +52,6 @@ pub fn spawn_actor(
         actor_name,
         spawned,
         channels,
-        health_config,
         drain,
         actor::Driver::Exec,
     ));
