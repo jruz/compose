@@ -46,7 +46,7 @@ pub struct Channels<'cfg> {
 
 pub enum StartupResult {
     CrashedDuringStartup { code: u8, failed_name: String },
-    Ready(Vec<(String, mpsc::UnboundedSender<message::Command>)>),
+    Ready,
 }
 
 enum OneshotOutcome {
@@ -108,12 +108,12 @@ pub async fn start_all(
     channels: &Channels<'_>,
     event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
     network: Option<&str>,
-) -> Result<StartupResult, Error> {
+) -> Result<(StartupResult, Vec<message::ActorHandle>), Error> {
     let shell = match &config.shell {
         Some(shell) => shell.as_str(),
         None => "sh",
     };
-    let mut cmd_senders: Vec<(String, mpsc::UnboundedSender<message::Command>)> = Vec::new();
+    let mut actors: Vec<message::ActorHandle> = Vec::new();
     for name in start_order {
         let proc_def = config
             .processes
@@ -143,16 +143,16 @@ pub async fn start_all(
 
         let env = env::resolve(global_env, proc_def)?;
 
-        let cmd_tx = spawn_process_actor(name, proc_def, shell, &env, network, channels)?;
+        let actor = spawn_process_actor(name, proc_def, shell, &env, network, channels)?;
 
         if is_oneshot {
-            if let Some(result) =
-                handle_oneshot(name, &cmd_senders, event_rx, &channels.notify).await?
-            {
-                return Ok(result);
+            if let Some(result) = handle_oneshot(name, &actors, event_rx, &channels.notify).await? {
+                actors.push(actor);
+                return Ok((result, actors));
             }
+            drop(actor.join.await);
         } else {
-            cmd_senders.push((name.clone(), cmd_tx));
+            actors.push(actor);
 
             if proc_def.health.is_some() {
                 shutdown::send_event(
@@ -161,21 +161,24 @@ pub async fn start_all(
                 )?;
             }
 
-            match start_service(name, proc_def, &cmd_senders, event_rx, &channels.notify).await? {
+            match start_service(name, proc_def, &actors, event_rx, &channels.notify).await? {
                 ServiceOutcome::Ready => {}
                 ServiceOutcome::CrashedDuringStartup { code, failed_name } => {
-                    return Ok(StartupResult::CrashedDuringStartup { code, failed_name });
+                    return Ok((
+                        StartupResult::CrashedDuringStartup { code, failed_name },
+                        actors,
+                    ));
                 }
             }
         }
     }
 
-    Ok(StartupResult::Ready(cmd_senders))
+    Ok((StartupResult::Ready, actors))
 }
 
 async fn handle_oneshot(
     name: &str,
-    cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)],
+    actors: &[message::ActorHandle],
     event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
     notify_tx: &mpsc::UnboundedSender<message::Event>,
 ) -> Result<Option<StartupResult>, Error> {
@@ -185,7 +188,7 @@ async fn handle_oneshot(
             name: name.to_string(),
         },
     )?;
-    match start_oneshot(name, cmd_senders, event_rx, notify_tx).await? {
+    match start_oneshot(name, actors, event_rx, notify_tx).await? {
         OneshotOutcome::Completed => {
             shutdown::send_event(
                 notify_tx,
@@ -204,7 +207,7 @@ async fn handle_oneshot(
                     stderr_lines: vec![],
                 },
             )?;
-            shutdown::kill_all(cmd_senders);
+            shutdown::kill_all(actors);
             Ok(Some(StartupResult::CrashedDuringStartup {
                 code: 1,
                 failed_name: name.to_string(),
@@ -215,13 +218,8 @@ async fn handle_oneshot(
             code,
             stderr_lines,
         } => {
-            let result = handle_crash_during_startup(
-                &crashed_name,
-                code,
-                &stderr_lines,
-                cmd_senders,
-                notify_tx,
-            )?;
+            let result =
+                handle_crash_during_startup(&crashed_name, code, &stderr_lines, actors, notify_tx)?;
             Ok(Some(result))
         }
     }
@@ -229,7 +227,7 @@ async fn handle_oneshot(
 
 async fn start_oneshot(
     name: &str,
-    cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)],
+    actors: &[message::ActorHandle],
     event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
     notify_tx: &mpsc::UnboundedSender<message::Event>,
 ) -> Result<OneshotOutcome, Error> {
@@ -265,7 +263,7 @@ async fn start_oneshot(
                         reason: reason.clone(),
                     },
                 )?;
-                shutdown::kill_all(cmd_senders);
+                shutdown::kill_all(actors);
                 return Err(Error::HealthFailed {
                     name: event_name,
                     reason,
@@ -285,7 +283,7 @@ async fn start_oneshot(
 async fn start_service(
     name: &str,
     proc_def: &config::ProcessDef,
-    cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)],
+    actors: &[message::ActorHandle],
     event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
     notify_tx: &mpsc::UnboundedSender<message::Event>,
 ) -> Result<ServiceOutcome, Error> {
@@ -315,7 +313,7 @@ async fn start_service(
                         reason: reason.clone(),
                     },
                 )?;
-                shutdown::kill_all(cmd_senders);
+                shutdown::kill_all(actors);
                 return Err(Error::HealthFailed {
                     name: event_name.clone(),
                     reason: reason.clone(),
@@ -334,17 +332,13 @@ async fn start_service(
                         stderr_lines: stderr_lines.clone(),
                     },
                 )?;
-                let remaining: Vec<String> = cmd_senders
-                    .iter()
-                    .map(|(nm, _)| nm.clone())
-                    .filter(|nm| nm != event_name)
-                    .collect();
                 shutdown::emit_killing_all(
-                    &remaining,
+                    actors,
+                    Some(event_name),
                     &format!("{event_name} crashed"),
                     notify_tx,
                 )?;
-                shutdown::kill_all(cmd_senders);
+                shutdown::kill_all(actors);
                 return Ok(ServiceOutcome::CrashedDuringStartup {
                     code: 1,
                     failed_name: event_name.clone(),
@@ -384,7 +378,7 @@ fn spawn_process_actor(
     env: &std::collections::BTreeMap<String, String>,
     network: Option<&str>,
     channels: &Channels<'_>,
-) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
+) -> Result<message::ActorHandle, Error> {
     let expanded_health = proc_def.health.as_ref().map(|hc| expand_health(hc, env));
     let expanded_command = proc_def
         .command
@@ -419,17 +413,16 @@ fn spawn_process_actor(
             stop_timeout_secs: docker_config.stop_timeout_secs,
             volumes: &volumes,
         };
-        let cmd_tx = docker_actor::spawn_actor(
+        Ok(docker_actor::spawn_actor(
             &run_config,
             channels.events.clone(),
             channels.output.clone(),
-        )?;
-        Ok(cmd_tx)
+        )?)
     } else {
         let expanded_command = expanded_command.ok_or_else(|| Error::MissingCommand {
             name: name.to_string(),
         })?;
-        let cmd_tx = process::spawn_actor(
+        Ok(process::spawn_actor(
             name,
             &expanded_command,
             shell,
@@ -437,8 +430,7 @@ fn spawn_process_actor(
             expanded_health.as_ref(),
             channels.events.clone(),
             channels.output.clone(),
-        )?;
-        Ok(cmd_tx)
+        )?)
     }
 }
 
@@ -446,7 +438,7 @@ fn handle_crash_during_startup(
     crashed_name: &str,
     code: u8,
     stderr_lines: &[String],
-    cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)],
+    actors: &[message::ActorHandle],
     notify_tx: &mpsc::UnboundedSender<message::Event>,
 ) -> Result<StartupResult, Error> {
     shutdown::send_event(
@@ -457,13 +449,13 @@ fn handle_crash_during_startup(
             stderr_lines: stderr_lines.to_vec(),
         },
     )?;
-    let remaining: Vec<String> = cmd_senders
-        .iter()
-        .map(|(nm, _)| nm.clone())
-        .filter(|nm| nm != crashed_name)
-        .collect();
-    shutdown::emit_killing_all(&remaining, &format!("{crashed_name} crashed"), notify_tx)?;
-    shutdown::kill_all(cmd_senders);
+    shutdown::emit_killing_all(
+        actors,
+        Some(crashed_name),
+        &format!("{crashed_name} crashed"),
+        notify_tx,
+    )?;
+    shutdown::kill_all(actors);
     Ok(StartupResult::CrashedDuringStartup {
         code: 1,
         failed_name: crashed_name.to_string(),

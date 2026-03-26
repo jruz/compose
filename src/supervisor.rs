@@ -12,6 +12,8 @@ use crate::lifecycle;
 use crate::message;
 use crate::startup;
 
+const ACTOR_SHUTDOWN_TIMEOUT_SECS: u64 = 12;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
@@ -78,7 +80,7 @@ pub async fn run(
         notify: notify_tx.clone(),
         output: display_tx.clone(),
     };
-    let startup_result = startup::start_all(
+    let (startup_result, actors) = startup::start_all(
         &config,
         &start_order,
         &global_env,
@@ -87,8 +89,17 @@ pub async fn run(
         network_name.as_deref(),
     )
     .await?;
-    let result = run_lifecycle(startup_result, event_tx, shutdown, &notify_tx, event_rx).await;
+    let result = run_lifecycle(
+        startup_result,
+        event_tx,
+        shutdown,
+        &notify_tx,
+        event_rx,
+        &actors,
+    )
+    .await;
 
+    await_actor_shutdown(actors, &display_tx).await;
     if let Some(net) = &network_name {
         docker_infra::cleanup(binary, &config, &start_order, net, &display_tx).await;
     }
@@ -114,6 +125,7 @@ async fn run_lifecycle(
     shutdown: lifecycle::ShutdownStrategy,
     notify_tx: &mpsc::UnboundedSender<message::Event>,
     event_rx: mpsc::UnboundedReceiver<message::Event>,
+    actors: &[message::ActorHandle],
 ) -> Result<message::ExitResult, Error> {
     match startup_result {
         startup::StartupResult::CrashedDuringStartup { code, failed_name } => {
@@ -122,14 +134,36 @@ async fn run_lifecycle(
                 failed_name: Some(failed_name),
             })
         }
-        startup::StartupResult::Ready(cmd_senders) => {
-            let all_names: Vec<String> =
-                cmd_senders.iter().map(|(name, _tx)| name.clone()).collect();
+        startup::StartupResult::Ready => {
             drop(event_tx);
-            lifecycle::manage(cmd_senders, &all_names, shutdown, notify_tx, event_rx)
+            lifecycle::manage(actors, shutdown, notify_tx, event_rx)
                 .await
                 .map_err(Error::from)
         }
+    }
+}
+
+async fn await_actor_shutdown(
+    actors: Vec<message::ActorHandle>,
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+) {
+    let mut actor_set = tokio::task::JoinSet::new();
+    for actor in actors {
+        actor_set.spawn(async move { drop(actor.join.await) });
+    }
+    let deadline = std::time::Duration::from_secs(ACTOR_SHUTDOWN_TIMEOUT_SECS);
+    if let Err(elapsed) = tokio::time::timeout(deadline, async {
+        while actor_set.join_next().await.is_some() {}
+    })
+    .await
+    {
+        drop(display_tx.send(message::DisplayMsg::Lifecycle(
+            message::LifecycleMsg::Killing {
+                name: "supervisor".to_string(),
+                reason: format!("actor shutdown timed out after {elapsed}"),
+            },
+        )));
+        actor_set.abort_all();
     }
 }
 

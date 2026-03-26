@@ -24,7 +24,7 @@ pub fn spawn_actor(
     health: Option<&config::HealthCheck>,
     event_tx: mpsc::UnboundedSender<message::Event>,
     display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
-) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
+) -> Result<message::ActorHandle, Error> {
     let mut std_cmd = std::process::Command::new(shell);
     std_cmd
         .arg("-c")
@@ -51,7 +51,7 @@ pub fn spawn_actor(
 
     let actor_name = name.to_string();
     let channels = actor::ActorChannels { cmd_rx, event_tx };
-    tokio::spawn(actor::actor_loop(
+    let handle = tokio::spawn(actor::actor_loop(
         actor_name,
         spawned,
         channels,
@@ -60,7 +60,11 @@ pub fn spawn_actor(
         actor::Driver::Exec,
     ));
 
-    Ok(cmd_tx)
+    Ok(message::ActorHandle {
+        cmd_tx,
+        join: handle,
+        name: name.to_string(),
+    })
 }
 
 pub fn spawn_child(

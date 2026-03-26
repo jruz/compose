@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::os::unix::process::CommandExt as _;
 
 use tokio::process;
 
@@ -106,8 +107,8 @@ pub fn build_command(
     cmd
 }
 
-pub fn run_command(binary: &str, run: &RunConfig<'_>) -> process::Command {
-    let mut cmd = process::Command::new(binary);
+pub fn run_command(binary: &str, run: &RunConfig<'_>) -> std::process::Command {
+    let mut cmd = std::process::Command::new(binary);
     cmd.arg("run")
         .arg("--rm")
         .arg("--name")
@@ -149,7 +150,7 @@ pub fn run_command(binary: &str, run: &RunConfig<'_>) -> process::Command {
 
     cmd.stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
+        .process_group(0);
 
     cmd
 }

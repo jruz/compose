@@ -108,6 +108,18 @@ pub struct ExitResult {
     pub failed_name: Option<String>,
 }
 
+pub struct ActorHandle {
+    pub cmd_tx: tokio::sync::mpsc::UnboundedSender<Command>,
+    pub join: tokio::task::JoinHandle<()>,
+    pub name: String,
+}
+
+impl ActorHandle {
+    pub fn kill(&self) {
+        drop(self.cmd_tx.send(Command::Kill));
+    }
+}
+
 pub fn display_msg_name(msg: &DisplayMsg) -> &str {
     match msg {
         DisplayMsg::Docker(docker) => match docker {

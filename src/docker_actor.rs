@@ -37,7 +37,7 @@ pub fn spawn_actor(
     run: &RunConfig<'_>,
     event_tx: mpsc::UnboundedSender<message::Event>,
     display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
-) -> Result<mpsc::UnboundedSender<message::Command>, Error> {
+) -> Result<message::ActorHandle, Error> {
     let container = docker::container_name(run.network, run.name);
     let docker_run = docker::RunConfig {
         command: run.command,
@@ -50,12 +50,13 @@ pub fn spawn_actor(
         ports: run.ports,
         volumes: run.volumes,
     };
-    let mut docker_cmd = docker::run_command(run.binary, &docker_run);
-    let mut spawned =
-        crate::process::spawn_child(&mut docker_cmd).map_err(|source| Error::Spawn {
-            name: run.name.to_string(),
-            source,
-        })?;
+    let std_cmd = docker::run_command(run.binary, &docker_run);
+    let mut cmd = tokio::process::Command::from(std_cmd);
+    cmd.kill_on_drop(true);
+    let mut spawned = crate::process::spawn_child(&mut cmd).map_err(|source| Error::Spawn {
+        name: run.name.to_string(),
+        source,
+    })?;
 
     let drain = actor::setup_output_drain(run.name, &mut spawned, display_tx);
     let health_config = run.health.map(actor::parse_health_config);
@@ -68,7 +69,7 @@ pub fn spawn_actor(
         container,
         stop_timeout_secs: run.stop_timeout_secs,
     };
-    tokio::spawn(actor::actor_loop(
+    let handle = tokio::spawn(actor::actor_loop(
         actor_name,
         spawned,
         channels,
@@ -77,5 +78,9 @@ pub fn spawn_actor(
         driver,
     ));
 
-    Ok(cmd_tx)
+    Ok(message::ActorHandle {
+        cmd_tx,
+        join: handle,
+        name: run.name.to_string(),
+    })
 }
