@@ -35,7 +35,7 @@ pub struct RunConfig<'cfg> {
 
 pub fn spawn_actor(
     run: &RunConfig<'_>,
-    event_tx: mpsc::UnboundedSender<message::Event>,
+    event_tx: mpsc::UnboundedSender<message::ActorEvent>,
     display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<message::ActorHandle, Error> {
     let container = docker::container_name(run.network, run.name);

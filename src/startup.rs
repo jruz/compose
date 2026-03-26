@@ -39,9 +39,8 @@ pub enum Error {
 
 pub struct Channels<'cfg> {
     pub binary: &'cfg str,
-    pub events: mpsc::UnboundedSender<message::Event>,
-    pub notify: mpsc::UnboundedSender<message::Event>,
-    pub output: mpsc::UnboundedSender<message::DisplayMsg>,
+    pub display: mpsc::UnboundedSender<message::DisplayMsg>,
+    pub events: mpsc::UnboundedSender<message::ActorEvent>,
 }
 
 pub enum StartupResult {
@@ -55,8 +54,8 @@ enum OneshotOutcome {
         code: u8,
     },
     OtherCrashed {
-        crashed_name: String,
         code: u8,
+        crashed_name: String,
         stderr_lines: Vec<String>,
     },
 }
@@ -106,7 +105,7 @@ pub async fn start_all(
     start_order: &[String],
     global_env: &BTreeMap<String, String>,
     channels: &Channels<'_>,
-    event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorEvent>,
     network: Option<&str>,
 ) -> Result<(StartupResult, Vec<message::ActorHandle>), Error> {
     let shell = match &config.shell {
@@ -133,9 +132,9 @@ pub async fn start_all(
             (None, None) => continue,
         };
 
-        shutdown::send_event(
-            &channels.notify,
-            message::Event::Starting {
+        send_lifecycle(
+            &channels.display,
+            message::LifecycleMsg::Starting {
                 name: name.clone(),
                 command: start_label,
             },
@@ -146,7 +145,8 @@ pub async fn start_all(
         let actor = spawn_process_actor(name, proc_def, shell, &env, network, channels)?;
 
         if is_oneshot {
-            if let Some(result) = handle_oneshot(name, &actors, event_rx, &channels.notify).await? {
+            if let Some(result) = handle_oneshot(name, &actors, event_rx, &channels.display).await?
+            {
                 actors.push(actor);
                 return Ok((result, actors));
             }
@@ -155,13 +155,13 @@ pub async fn start_all(
             actors.push(actor);
 
             if proc_def.health.is_some() {
-                shutdown::send_event(
-                    &channels.notify,
-                    message::Event::WaitingHealth { name: name.clone() },
+                send_lifecycle(
+                    &channels.display,
+                    message::LifecycleMsg::WaitingHealth { name: name.clone() },
                 )?;
             }
 
-            match start_service(name, proc_def, &actors, event_rx, &channels.notify).await? {
+            match start_service(name, proc_def, &actors, event_rx, &channels.display).await? {
                 ServiceOutcome::Ready => {}
                 ServiceOutcome::CrashedDuringStartup { code, failed_name } => {
                     return Ok((
@@ -179,32 +179,31 @@ pub async fn start_all(
 async fn handle_oneshot(
     name: &str,
     actors: &[message::ActorHandle],
-    event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
-    notify_tx: &mpsc::UnboundedSender<message::Event>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorEvent>,
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<Option<StartupResult>, Error> {
-    shutdown::send_event(
-        notify_tx,
-        message::Event::WaitingCompletion {
+    send_lifecycle(
+        display_tx,
+        message::LifecycleMsg::WaitingCompletion {
             name: name.to_string(),
         },
     )?;
-    match start_oneshot(name, actors, event_rx, notify_tx).await? {
+    match start_oneshot(name, actors, event_rx, display_tx).await? {
         OneshotOutcome::Completed => {
-            shutdown::send_event(
-                notify_tx,
-                message::Event::Completed {
+            send_lifecycle(
+                display_tx,
+                message::LifecycleMsg::Completed {
                     name: name.to_string(),
                 },
             )?;
             Ok(None)
         }
         OneshotOutcome::Failed { code } => {
-            shutdown::send_event(
-                notify_tx,
-                message::Event::Exited {
+            send_lifecycle(
+                display_tx,
+                message::LifecycleMsg::Exited {
                     name: name.to_string(),
                     code,
-                    stderr_lines: vec![],
                 },
             )?;
             shutdown::kill_all(actors);
@@ -218,8 +217,13 @@ async fn handle_oneshot(
             code,
             stderr_lines,
         } => {
-            let result =
-                handle_crash_during_startup(&crashed_name, code, &stderr_lines, actors, notify_tx)?;
+            let result = handle_crash_during_startup(
+                &crashed_name,
+                code,
+                &stderr_lines,
+                actors,
+                display_tx,
+            )?;
             Ok(Some(result))
         }
     }
@@ -228,14 +232,14 @@ async fn handle_oneshot(
 async fn start_oneshot(
     name: &str,
     actors: &[message::ActorHandle],
-    event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
-    notify_tx: &mpsc::UnboundedSender<message::Event>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorEvent>,
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<OneshotOutcome, Error> {
     loop {
         let event = event_rx.recv().await.ok_or(Error::EventChannelClosed)?;
 
         match event {
-            message::Event::Exited {
+            message::ActorEvent::Exited {
                 name: event_name,
                 code,
                 stderr_lines,
@@ -252,13 +256,13 @@ async fn start_oneshot(
                     stderr_lines,
                 });
             }
-            message::Event::HealthFailed {
+            message::ActorEvent::HealthFailed {
                 name: event_name,
                 reason,
             } => {
-                shutdown::send_event(
-                    notify_tx,
-                    message::Event::HealthFailed {
+                send_lifecycle(
+                    display_tx,
+                    message::LifecycleMsg::HealthFailed {
                         name: event_name.clone(),
                         reason: reason.clone(),
                     },
@@ -269,13 +273,7 @@ async fn start_oneshot(
                     reason,
                 });
             }
-            message::Event::Completed { .. }
-            | message::Event::Crashed { .. }
-            | message::Event::Healthy { .. }
-            | message::Event::Killing { .. }
-            | message::Event::Starting { .. }
-            | message::Event::WaitingCompletion { .. }
-            | message::Event::WaitingHealth { .. } => {}
+            message::ActorEvent::Healthy { .. } => {}
         }
     }
 }
@@ -284,31 +282,31 @@ async fn start_service(
     name: &str,
     proc_def: &config::ProcessDef,
     actors: &[message::ActorHandle],
-    event_rx: &mut mpsc::UnboundedReceiver<message::Event>,
-    notify_tx: &mpsc::UnboundedSender<message::Event>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorEvent>,
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<ServiceOutcome, Error> {
     loop {
         let event = event_rx.recv().await.ok_or(Error::EventChannelClosed)?;
 
         match &event {
-            message::Event::Healthy { name: event_name } if event_name == name => {
+            message::ActorEvent::Healthy { name: event_name } if event_name == name => {
                 if proc_def.health.is_some() {
-                    shutdown::send_event(
-                        notify_tx,
-                        message::Event::Healthy {
+                    send_lifecycle(
+                        display_tx,
+                        message::LifecycleMsg::Healthy {
                             name: name.to_string(),
                         },
                     )?;
                 }
                 return Ok(ServiceOutcome::Ready);
             }
-            message::Event::HealthFailed {
+            message::ActorEvent::HealthFailed {
                 name: event_name,
                 reason,
             } => {
-                shutdown::send_event(
-                    notify_tx,
-                    message::Event::HealthFailed {
+                send_lifecycle(
+                    display_tx,
+                    message::LifecycleMsg::HealthFailed {
                         name: event_name.clone(),
                         reason: reason.clone(),
                     },
@@ -319,24 +317,17 @@ async fn start_service(
                     reason: reason.clone(),
                 });
             }
-            message::Event::Exited {
+            message::ActorEvent::Exited {
                 name: event_name,
                 code,
                 stderr_lines,
             } if event_name != name => {
-                shutdown::send_event(
-                    notify_tx,
-                    message::Event::Crashed {
-                        name: event_name.clone(),
-                        code: *code,
-                        stderr_lines: stderr_lines.clone(),
-                    },
-                )?;
+                send_crashed(display_tx, event_name, *code, stderr_lines)?;
                 shutdown::emit_killing_all(
                     actors,
                     Some(event_name),
                     &format!("{event_name} crashed"),
-                    notify_tx,
+                    display_tx,
                 )?;
                 shutdown::kill_all(actors);
                 return Ok(ServiceOutcome::CrashedDuringStartup {
@@ -344,14 +335,7 @@ async fn start_service(
                     failed_name: event_name.clone(),
                 });
             }
-            message::Event::Completed { .. }
-            | message::Event::Crashed { .. }
-            | message::Event::Exited { .. }
-            | message::Event::Healthy { .. }
-            | message::Event::Killing { .. }
-            | message::Event::Starting { .. }
-            | message::Event::WaitingCompletion { .. }
-            | message::Event::WaitingHealth { .. } => {}
+            message::ActorEvent::Exited { .. } | message::ActorEvent::Healthy { .. } => {}
         }
     }
 }
@@ -416,7 +400,7 @@ fn spawn_process_actor(
         Ok(docker_actor::spawn_actor(
             &run_config,
             channels.events.clone(),
-            channels.output.clone(),
+            channels.display.clone(),
         )?)
     } else {
         let expanded_command = expanded_command.ok_or_else(|| Error::MissingCommand {
@@ -429,7 +413,7 @@ fn spawn_process_actor(
             env,
             expanded_health.as_ref(),
             channels.events.clone(),
-            channels.output.clone(),
+            channels.display.clone(),
         )?)
     }
 }
@@ -439,25 +423,50 @@ fn handle_crash_during_startup(
     code: u8,
     stderr_lines: &[String],
     actors: &[message::ActorHandle],
-    notify_tx: &mpsc::UnboundedSender<message::Event>,
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<StartupResult, Error> {
-    shutdown::send_event(
-        notify_tx,
-        message::Event::Crashed {
-            name: crashed_name.to_string(),
-            code,
-            stderr_lines: stderr_lines.to_vec(),
-        },
-    )?;
+    send_crashed(display_tx, crashed_name, code, stderr_lines)?;
     shutdown::emit_killing_all(
         actors,
         Some(crashed_name),
         &format!("{crashed_name} crashed"),
-        notify_tx,
+        display_tx,
     )?;
     shutdown::kill_all(actors);
     Ok(StartupResult::CrashedDuringStartup {
         code: 1,
         failed_name: crashed_name.to_string(),
     })
+}
+
+fn send_lifecycle(
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    msg: message::LifecycleMsg,
+) -> Result<(), Error> {
+    shutdown::send_display(display_tx, message::DisplayMsg::Lifecycle(msg)).map_err(Error::from)
+}
+
+fn send_crashed(
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    name: &str,
+    code: u8,
+    stderr_lines: &[String],
+) -> Result<(), Error> {
+    send_lifecycle(
+        display_tx,
+        message::LifecycleMsg::Crashed {
+            name: name.to_string(),
+            code,
+        },
+    )?;
+    if !stderr_lines.is_empty() {
+        send_lifecycle(
+            display_tx,
+            message::LifecycleMsg::Summary {
+                name: name.to_string(),
+                stderr_lines: stderr_lines.to_vec(),
+            },
+        )?;
+    }
+    Ok(())
 }

@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 
 use crate::cli;
 use crate::config;
@@ -51,8 +50,6 @@ pub async fn run(
 
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     let (display_tx, display_rx) = mpsc::unbounded_channel();
-    let (notify_tx, notify_rx) = mpsc::unbounded_channel();
-    let translator_handle = spawn_translator(notify_rx, display_tx.clone());
     let formatter_handle = formatter::spawn_task(&names, display_rx, log_tx)?;
 
     let start_order = startup::resolve_start_order(&config);
@@ -76,9 +73,8 @@ pub async fn run(
 
     let channels = startup::Channels {
         binary,
+        display: display_tx.clone(),
         events: event_tx.clone(),
-        notify: notify_tx.clone(),
-        output: display_tx.clone(),
     };
     let (startup_result, actors) = startup::start_all(
         &config,
@@ -93,7 +89,7 @@ pub async fn run(
         startup_result,
         event_tx,
         shutdown,
-        &notify_tx,
+        &display_tx,
         event_rx,
         &actors,
     )
@@ -103,9 +99,7 @@ pub async fn run(
     if let Some(net) = &network_name {
         docker_infra::cleanup(binary, &config, &start_order, net, &display_tx).await;
     }
-    drop(notify_tx);
     drop(channels);
-    drop(translator_handle.await);
     drop(display_tx);
     drop(formatter_handle.await);
     result
@@ -121,10 +115,10 @@ fn display_names(config: &config::Config, has_docker: bool, runtime_label: &str)
 
 async fn run_lifecycle(
     startup_result: startup::StartupResult,
-    event_tx: mpsc::UnboundedSender<message::Event>,
+    event_tx: mpsc::UnboundedSender<message::ActorEvent>,
     shutdown: lifecycle::ShutdownStrategy,
-    notify_tx: &mpsc::UnboundedSender<message::Event>,
-    event_rx: mpsc::UnboundedReceiver<message::Event>,
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+    event_rx: mpsc::UnboundedReceiver<message::ActorEvent>,
     actors: &[message::ActorHandle],
 ) -> Result<message::ExitResult, Error> {
     match startup_result {
@@ -136,7 +130,7 @@ async fn run_lifecycle(
         }
         startup::StartupResult::Ready => {
             drop(event_tx);
-            lifecycle::manage(actors, shutdown, notify_tx, event_rx)
+            lifecycle::manage(actors, shutdown, display_tx, event_rx)
                 .await
                 .map_err(Error::from)
         }
@@ -196,82 +190,5 @@ fn resolve_shutdown(
             Ok(lifecycle::ShutdownStrategy::MainProcess(main))
         }
         cli::Command::Up(_) => Ok(lifecycle::ShutdownStrategy::AnyExit),
-    }
-}
-
-fn spawn_translator(
-    mut notify_rx: mpsc::UnboundedReceiver<message::Event>,
-    display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        while let Some(event) = notify_rx.recv().await {
-            for msg in event_to_display(&event) {
-                if let Err(_send_err) = display_tx.send(msg) {
-                    break;
-                }
-            }
-        }
-    })
-}
-
-fn event_to_display(event: &message::Event) -> Vec<message::DisplayMsg> {
-    match event {
-        message::Event::Completed { name } => vec![message::DisplayMsg::Lifecycle(
-            message::LifecycleMsg::Completed { name: name.clone() },
-        )],
-        message::Event::Crashed {
-            name,
-            code,
-            stderr_lines,
-        } => {
-            let mut msgs = vec![message::DisplayMsg::Lifecycle(
-                message::LifecycleMsg::Crashed {
-                    name: name.clone(),
-                    code: *code,
-                },
-            )];
-            if !stderr_lines.is_empty() {
-                msgs.push(message::DisplayMsg::Lifecycle(
-                    message::LifecycleMsg::Summary {
-                        name: name.clone(),
-                        stderr_lines: stderr_lines.clone(),
-                    },
-                ));
-            }
-            msgs
-        }
-        message::Event::Exited { name, code, .. } => vec![message::DisplayMsg::Lifecycle(
-            message::LifecycleMsg::Exited {
-                name: name.clone(),
-                code: *code,
-            },
-        )],
-        message::Event::HealthFailed { name, reason } => vec![message::DisplayMsg::Lifecycle(
-            message::LifecycleMsg::HealthFailed {
-                name: name.clone(),
-                reason: reason.clone(),
-            },
-        )],
-        message::Event::Healthy { name } => vec![message::DisplayMsg::Lifecycle(
-            message::LifecycleMsg::Healthy { name: name.clone() },
-        )],
-        message::Event::Killing { name, reason } => vec![message::DisplayMsg::Lifecycle(
-            message::LifecycleMsg::Killing {
-                name: name.clone(),
-                reason: reason.clone(),
-            },
-        )],
-        message::Event::Starting { name, command } => vec![message::DisplayMsg::Lifecycle(
-            message::LifecycleMsg::Starting {
-                name: name.clone(),
-                command: command.clone(),
-            },
-        )],
-        message::Event::WaitingCompletion { name } => vec![message::DisplayMsg::Lifecycle(
-            message::LifecycleMsg::WaitingCompletion { name: name.clone() },
-        )],
-        message::Event::WaitingHealth { name } => vec![message::DisplayMsg::Lifecycle(
-            message::LifecycleMsg::WaitingHealth { name: name.clone() },
-        )],
     }
 }

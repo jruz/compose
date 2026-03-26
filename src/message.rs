@@ -1,16 +1,8 @@
 #[derive(Debug)]
-pub enum Event {
-    Completed {
-        name: String,
-    },
-    Crashed {
-        name: String,
-        code: u8,
-        stderr_lines: Vec<String>,
-    },
+pub enum ActorEvent {
     Exited {
-        name: String,
         code: u8,
+        name: String,
         stderr_lines: Vec<String>,
     },
     HealthFailed {
@@ -18,20 +10,6 @@ pub enum Event {
         reason: String,
     },
     Healthy {
-        name: String,
-    },
-    Killing {
-        name: String,
-        reason: String,
-    },
-    Starting {
-        name: String,
-        command: String,
-    },
-    WaitingCompletion {
-        name: String,
-    },
-    WaitingHealth {
         name: String,
     },
 }
@@ -57,12 +35,12 @@ pub enum LifecycleMsg {
         name: String,
     },
     Crashed {
-        name: String,
         code: u8,
+        name: String,
     },
     Exited {
-        name: String,
         code: u8,
+        name: String,
     },
     HealthFailed {
         name: String,
@@ -76,8 +54,8 @@ pub enum LifecycleMsg {
         reason: String,
     },
     Starting {
-        name: String,
         command: String,
+        name: String,
     },
     Summary {
         name: String,
@@ -93,7 +71,7 @@ pub enum LifecycleMsg {
 
 #[derive(Debug)]
 pub enum OutputMsg {
-    Line { name: String, line: String },
+    Line { line: String, name: String },
 }
 
 #[derive(Debug)]
@@ -101,11 +79,6 @@ pub enum DisplayMsg {
     Docker(DockerMsg),
     Lifecycle(LifecycleMsg),
     Output(OutputMsg),
-}
-
-pub struct ExitResult {
-    pub code: u8,
-    pub failed_name: Option<String>,
 }
 
 pub struct ActorHandle {
@@ -118,6 +91,11 @@ impl ActorHandle {
     pub fn kill(&self) {
         drop(self.cmd_tx.send(Command::Kill));
     }
+}
+
+pub struct ExitResult {
+    pub code: u8,
+    pub failed_name: Option<String>,
 }
 
 pub fn display_msg_name(msg: &DisplayMsg) -> &str {
