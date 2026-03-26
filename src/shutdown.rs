@@ -8,25 +8,28 @@ pub enum Error {
     EventChannelClosed(mpsc::error::SendError<message::Event>),
 }
 
-pub fn kill_all(cmd_senders: &[(String, mpsc::UnboundedSender<message::Command>)]) {
-    for (_name, tx) in cmd_senders {
-        if let Err(_send_err) = tx.send(message::Command::Kill) {}
+pub fn kill_all(actors: &[message::ActorHandle]) {
+    for actor in actors {
+        actor.kill();
     }
 }
 
 pub fn emit_killing_all(
-    names: &[String],
+    actors: &[message::ActorHandle],
+    exclude: Option<&str>,
     reason: &str,
     event_tx: &mpsc::UnboundedSender<message::Event>,
 ) -> Result<(), Error> {
-    for name in names {
-        send_event(
-            event_tx,
-            message::Event::Killing {
-                name: name.clone(),
-                reason: reason.to_string(),
-            },
-        )?;
+    for actor in actors {
+        if exclude.is_none_or(|name| actor.name != name) {
+            send_event(
+                event_tx,
+                message::Event::Killing {
+                    name: actor.name.clone(),
+                    reason: reason.to_string(),
+                },
+            )?;
+        }
     }
     Ok(())
 }
