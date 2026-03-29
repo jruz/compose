@@ -11,16 +11,24 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 
 ## Architecture
 
+- `main.rs` - entry point: parses CLI, loads config, runs supervisor
 - `cli.rs` - clap derive CLI: `run` (exit on last process) and `up` (exit on any process)
 - `config.rs` - YAML loading, validation (circular deps, unknown deps, empty health), env file parsing
-- `actor.rs` - shared actor loop: output streaming, health check polling, graceful kill (exec: SIGTERM+SIGKILL, docker: docker stop)
+- `env.rs` - env resolution: global env file, process env file, inline env, `${VAR}` interpolation with cycle detection
+- `supervisor.rs` - coordinates docker infrastructure, process startup, lifecycle management, and cleanup
+- `startup.rs` - resolves dependency order, spawns processes, waits for health checks
+- `lifecycle.rs` - manages process lifecycle strategies and signal handling
+- `shutdown.rs` - sends kill signals to actors and shutdown notifications
+- `actor.rs` - async loop: watches process, reports exit via ActorExited, responds to kill command, graceful shutdown (SIGTERM+SIGKILL for exec, docker stop for containers)
 - `process.rs` - spawns exec processes via `sh -c`, delegates to actor loop
 - `docker_actor.rs` - spawns docker containers via `docker run`, delegates to actor loop
+- `build_actor.rs` - builds docker images for processes with build contexts in dependency order
 - `docker.rs` - container CLI wrappers (build, run, exec, stop, rm, network), runtime-agnostic via binary parameter
-- `supervisor.rs` - starts processes in dependency order, manages lifecycle, handles shutdown signals
-- `env.rs` - env resolution: global env file, process env file, inline env, `${VAR}` interpolation with cycle detection
+- `docker_infra.rs` - manages docker network creation, image building, and cleanup
+- `health.rs` - health check types, config parsing, and execution (shell command or exec form), called from startup.rs
 - `formatter.rs` - colored tagged output, 6-color cycle
-- `message.rs` - event and display message enums for actor-supervisor communication
+- `message.rs` - ActorExited struct (actor→supervisor), DisplayMsg enum (anyone→formatter), ActorHandle struct, Command enum
+- `version.rs` - version string from build environment variables
 
 ## Testing
 
@@ -30,11 +38,12 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 
 ## Documentation
 
-When adding or changing config fields or features, update all three places:
+When adding or changing config fields or features, update all four places:
 
 - `src/cli.rs` - `long_about` schema in `--help`
 - `README.md` - config schema and usage examples
 - `CLAUDE.md` - config schema below
+- `~/dev/.claude/skills/compose/SKILL.md` - global skill docs and examples
 
 ## Config Schema
 
@@ -43,10 +52,11 @@ runtime: docker | podman         # optional, default: docker
 shell: <string>                  # optional, default: sh
 processes:
   <name>:
-    command: <string>             # exec driver, supports ${VAR} interpolation
-    docker:                       # docker driver (alternative to command)
+    command: <string>             # shell command (exec) or CMD override (docker), supports ${VAR}
+    exec: [<string>, ...]         # CMD override exec form (docker only), supports ${VAR}
+    docker:                       # container driver (alternative to command)
       image: <string>             # required if no build
-      build: <path>               # build context
+      build: <path>               # build context (required if no image)
       dockerfile: <path>          # optional, custom Dockerfile path
       ports: [<host:container>]     # supports ${VAR} interpolation
       volumes: [<host:container>]   # supports ${VAR} interpolation
@@ -58,7 +68,7 @@ processes:
     env_file: <path>              # optional, KEY=VALUE format
     health:                       # optional (not allowed on oneshot)
       command: <string>           # shell health check, supports ${VAR} interpolation
-      exec: [<string>, ...]       # exec health check, supports ${VAR} interpolation
+      exec: [<string>, ...]       # exec health check (no shell), supports ${VAR} interpolation
       interval_secs: <int>
       timeout_secs: <int>
 ```
