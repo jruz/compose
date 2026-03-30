@@ -31,20 +31,30 @@ const deleteLocalTag = async (tag: string): Promise<void> => {
   log.info(`deleted local tag ${tag}`);
 };
 
-const deleteRemoteTag = async (tag: string): Promise<void> => {
-  const list = await run([
-    "git",
-    "ls-remote",
-    "--tags",
-    "origin",
-    `refs/tags/${tag}`,
-  ]);
-  if (list.stdout === "") {
+const deleteRemoteTag = async (
+  tag: string,
+  token: string,
+  repo: string,
+): Promise<void> => {
+  const url = `https://codeberg.org/api/v1/repos/${repo}/tags/${tag}`;
+  const res = await fetch(url, { headers: headers(token) });
+
+  if (res.status === 404) {
     log.info(`remote tag ${tag} not found, skipping`);
     return;
   }
-  const result = await run(["git", "push", "origin", `:refs/tags/${tag}`]);
-  if (!result.ok) throw new Error(`git push origin :refs/tags/${tag} failed`);
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`check tag: ${res.status} ${text}`);
+  }
+
+  const del = await fetch(url, { method: "DELETE", headers: headers(token) });
+  if (!del.ok) {
+    const text = await del.text();
+    throw new Error(`delete tag: ${del.status} ${text}`);
+  }
+
   log.info(`deleted remote tag ${tag}`);
 };
 
@@ -103,7 +113,7 @@ const main = async () => {
   const repo = await repoFromRemote();
 
   await deleteLocalTag(tag);
-  await deleteRemoteTag(tag);
+  await deleteRemoteTag(tag, token, repo);
 
   const releaseId = await findRelease(tag, token, repo);
   if (releaseId === null) {

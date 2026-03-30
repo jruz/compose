@@ -6,7 +6,7 @@ ARCH=$2
 TARGET="${ARCH}-${OS}"
 NAME=$(grep '^name' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
-docker run \
+podman run \
   --rm \
   --volume "$(pwd):/workspace" \
   --workdir /workspace \

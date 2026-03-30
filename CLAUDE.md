@@ -4,10 +4,21 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 
 ## Commands
 
-- `just check` - full lint suite (fmt, clippy, build, test)
+- `just check` - full lint suite (fmt, clippy, build, test) inside sandbox
+- `just check-ci` - full lint suite + tests inside sandbox
 - `just test` - run tests with cargo nextest
 - `just fix` - auto-fix fmt and clippy
-- `just compose-check` - run `just check` inside a podman container via compose
+- `just sandbox-test` - verify sandbox filesystem isolation
+
+## Sandbox
+
+- `flake.nix` defines a `sandbox` wrapper using bubblewrap (`bwrap`)
+- Unshares all namespaces except network (`--unshare-all --share-net`)
+- `$HOME` is a tmpfs — only `$HOME/.cargo` and `$HOME/.gitconfig` are bind-mounted
+- Current working directory is read-write, `/nix` and system paths are read-only
+- PATH is restricted to an explicit set of tools defined in `sandboxPath`
+- `just check` and `just check-ci` run inside the sandbox
+- Two devShells: `default` (minimal: just, nushell, sandbox) and `sandbox` (full tooling for use inside the sandbox)
 
 ## Architecture
 
@@ -42,37 +53,5 @@ When adding or changing config fields or features, update all four places:
 
 - `src/cli.rs` - `long_about` schema in `--help`
 - `README.md` - config schema and usage examples
-- `CLAUDE.md` - config schema below
+- `CLAUDE.md` - config
 - `~/dev/.claude/skills/compose/SKILL.md` - global skill docs and examples
-
-## Config Schema
-
-```yaml
-runtime: docker | podman         # optional, default: docker
-shell: <string>                  # optional, default: sh
-processes:
-  <name>:
-    command: <string>             # shell command (exec) or CMD override (docker), supports ${VAR}
-    exec: [<string>, ...]         # CMD override exec form (docker only), supports ${VAR}
-    docker:                       # container driver (alternative to command)
-      image: <string>             # required if no build
-      build: <path>               # build context (required if no image)
-      dockerfile: <path>          # optional, custom Dockerfile path
-      ports: [<host:container>]     # supports ${VAR} interpolation
-      volumes: [<host:container>]   # supports ${VAR} interpolation
-      stop_timeout_secs: <int>    # optional, omit for docker default (10s)
-    type: service | oneshot       # optional, default: service
-    depends_on: [<name>, ...]     # optional
-    env:                          # optional
-      KEY: "VALUE"
-    env_file: <path>              # optional, KEY=VALUE format
-    health:                       # optional (not allowed on oneshot)
-      command: <string>           # shell health check, supports ${VAR} interpolation
-      exec: [<string>, ...]       # exec health check (no shell), supports ${VAR} interpolation
-      interval_secs: <int>
-      timeout_secs: <int>
-```
-
-### Variable Interpolation
-
-All string values support `${VAR}` interpolation from resolved env vars (inline env, env_file, --env-file) and host environment. Applies to: `command`, `exec`, `ports`, `volumes`, `health.command`, `health.exec`. Undefined variables stay literal.
