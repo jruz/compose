@@ -2,3 +2,6 @@
 .direnv
 PLAN.md
 tests/fixtures/docker_volumes/compose.yaml
+.claude/scheduled_tasks.lock
+.env
+result

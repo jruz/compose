@@ -1,20 +1,26 @@
-install:
-    cargo install --path . --force
+set dotenv-load
+
+# ─── general ──────────────────────────────────────────────────────────────────
 
 check:
+    just nix-check
     just woodpecker-check
     just rust-check
 
 check-ci:
     just check
-    just rust-test
-
-compose-check:
-    cargo build --release
-    ./target/release/compose run --config compose.check.yaml
+    just test
 
 test:
     just rust-test
+
+install:
+    sandbox cargo build --release
+    cp target/release/compose ~/.cargo/bin/compose
+
+fix:
+    just nix-fix
+    just rust-fix
 
 run *ARGS='':
     cargo run {{ARGS}}
@@ -22,14 +28,34 @@ run *ARGS='':
 watch:
     just rust-watch
 
-fix:
-    just rust-fix
+# ─── sandbox ─────────────────────────────────────────────────────────────────
+
+sandbox-test:
+    sandbox bun scripts/sandbox-test.ts
+
+# ─── nix ──────────────────────────────────────────────────────────────────────
+
+nix-check:
+    fd \
+        --extension nix \
+        --exec nixfmt --check
+    statix check .
+    deadnix --fail .
+
+nix-fix:
+    fd \
+        --extension nix \
+        --exec nixfmt
+    statix fix .
+    deadnix --edit .
+
+# ─── rust ─────────────────────────────────────────────────────────────────────
 
 rust-build:
-    cargo build --all-targets
+    sandbox cargo build --all-targets
 
 rust-cargo-check:
-    cargo check --all-targets
+    sandbox cargo check --all-targets
 
 rust-check:
     just rust-cargo-check
@@ -37,10 +63,10 @@ rust-check:
     just rust-clippy
 
 rust-clippy *ARGS='':
-    cargo clippy --all-targets {{ARGS}}
+    sandbox cargo clippy --all-targets {{ARGS}}
 
 rust-clippy-fix *ARGS='':
-    cargo clippy \
+    sandbox cargo clippy \
         --fix \
         --all-targets \
         --allow-dirty \
@@ -51,51 +77,55 @@ rust-fix:
     just rust-clippy-fix
 
 rust-fmt-check:
-    cargo fmt --all -- --check
+    sandbox cargo fmt --all -- --check
 
 rust-fmt-fix:
-    cargo fmt --all
+    sandbox cargo fmt --all
 
 rust-outdated:
-    cargo outdated
+    sandbox cargo outdated
 
 rust-test *FILTER='':
-    cargo nextest run \
+    sandbox cargo nextest run \
         --no-tests=pass \
         {{FILTER}}
 
-rust-watch:
-    cargo watch --exec run
-
 rust-upgrade:
-    cargo upgrade --incompatible
-    cargo update
+    sandbox cargo upgrade --incompatible
+    sandbox cargo update
 
-docker-clean:
-    bun scripts/docker-clean.ts
+rust-watch:
+    sandbox cargo watch --exec run
+
+# ─── woodpecker ───────────────────────────────────────────────────────────────
+
+woodpecker-check:
+    sandbox woodpecker-cli lint .woodpecker/
+
+# ─── examples ─────────────────────────────────────────────────────────────────
 
 example-run:
-    cargo build --release
+    sandbox cargo build --release
     ./target/release/compose run --config examples/compose.run.yaml
 
 example-up:
-    cargo build --release
+    sandbox cargo build --release
     ./target/release/compose up --config examples/compose.up.yaml
 
 example-fail:
-    cargo build --release
+    sandbox cargo build --release
     ./target/release/compose run --config examples/compose.fail.yaml
 
 example-docker-run:
-    cargo build --release
+    sandbox cargo build --release
     ./target/release/compose run --config examples/compose.docker-run.yaml
 
 example-docker-fail:
-    cargo build --release
+    sandbox cargo build --release
     ./target/release/compose run --config examples/compose.docker-fail.yaml
 
 example-invalid-fields:
-    cargo build --release
+    sandbox cargo build --release
     ./target/release/compose run --config examples/compose.invalid-fields.yaml
 
 generate-screenshots:
@@ -104,6 +134,8 @@ generate-screenshots:
     vhs examples/vhs/run.tape
     vhs examples/vhs/up.tape
     vhs examples/vhs/fail.tape
+
+# ─── release ──────────────────────────────────────────────────────────────────
 
 release-build-linux:
     scripts/release-build.sh unknown-linux-gnu x86_64
@@ -114,15 +146,7 @@ release-build-macos:
     scripts/release-build.sh apple-darwin aarch64
 
 release-upload TAG:
-    bun scripts/release-upload.ts {{ TAG }}
+    sandbox bun scripts/release-upload.ts {{ TAG }}
 
 release-delete TAG:
-    bun scripts/release-delete.ts {{ TAG }}
-
-woodpecker-check:
-    #!/usr/bin/env nu
-    glob .woodpecker/*.yml | each {|f|
-        print $"Linting ($f)..."
-        woodpecker-cli lint $f
-    }
-    print $"(ansi green)OK: All woodpecker configs valid(ansi reset)"
+    sandbox bun scripts/release-delete.ts {{ TAG }}

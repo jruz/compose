@@ -1,6 +1,3 @@
 #!/usr/bin/env nu
 
-if "SKIP_HOOKS" not-in $env {
-    just check
-    just test
-}
+just check-ci

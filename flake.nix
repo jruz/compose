@@ -7,8 +7,16 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+      flake-utils,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
@@ -17,29 +25,69 @@
         rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         revision = self.rev or "dirty";
-        commonPackages = with pkgs; [
-          bun
-          cargo-edit
-          cargo-nextest
-          cargo-outdated
-          cargo-watch
-          just
-          nushell
+        sandboxPath = pkgs.lib.makeBinPath [
           rust
-          woodpecker-cli
+          pkgs.bash
+          pkgs.bun
+          pkgs.cargo-edit
+          pkgs.cargo-nextest
+          pkgs.cargo-outdated
+          pkgs.cargo-watch
+          pkgs.coreutils
+          pkgs.docker-client
+          pkgs.findutils
+          pkgs.gcc
+          pkgs.git
+          pkgs.gnugrep
+          pkgs.just
+          pkgs.nushell
+          pkgs.podman
+          pkgs.woodpecker-cli
         ];
-        darwinPackages = with pkgs; [ libiconv ];
-        linuxPackages = with pkgs; [ docker-client glibc glibcLocales podman ];
-        platformPackages =
-          if pkgs.stdenv.isDarwin then
-            commonPackages ++ darwinPackages
-          else
-            commonPackages ++ linuxPackages;
+        sandbox = pkgs.writeShellScriptBin "sandbox" ''
+          SELF_DIR="$(dirname "$(readlink -f "$0")")"
+          SANDBOX_CMD="''${@:-$SHELL}"
+          exec ${pkgs.bubblewrap}/bin/bwrap \
+            --unshare-all \
+            --share-net \
+            --die-with-parent \
+            --ro-bind /nix /nix \
+            --ro-bind /etc/resolv.conf /etc/resolv.conf \
+            --ro-bind /etc/ssl /etc/ssl \
+            --ro-bind-try /etc/static /etc/static \
+            --ro-bind-try /etc/nix /etc/nix \
+            --ro-bind-try /run/current-system/sw /run/current-system/sw \
+            --symlink ${pkgs.coreutils}/bin/env /usr/bin/env \
+            --symlink ${pkgs.bash}/bin/bash /bin/sh \
+            --tmpfs "$HOME" \
+            --bind "$(pwd)" "$(pwd)" \
+            --bind /tmp /tmp \
+            --bind-try "$HOME/.bun" "$HOME/.bun" \
+            --bind-try "$HOME/.cargo" "$HOME/.cargo" \
+            --bind-try /var/run/docker.sock /var/run/docker.sock \
+            --ro-bind-try "$HOME/.gitconfig" "$HOME/.gitconfig" \
+            --ro-bind-try "$HOME/.ssh/known_hosts" "$HOME/.ssh/known_hosts" \
+            --setenv PATH "${sandboxPath}:$SELF_DIR" \
+            --setenv HOME "$HOME" \
+            --setenv REVISION "''${REVISION:-dev}" \
+            --dev /dev \
+            --proc /proc \
+            $SANDBOX_CMD
+        '';
+        defaultPackages = with pkgs; [
+          deadnix
+          fd
+          just
+          nixfmt
+          nushell
+          sandbox
+          statix
+        ];
       in
       {
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = cargoToml.package.name;
-          version = cargoToml.package.version;
+          inherit (cargoToml.package) version;
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           REVISION = revision;
@@ -49,18 +97,18 @@
         };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = platformPackages;
+          buildInputs = defaultPackages;
 
           shellHook = ''
             echo ""
-            echo "  Rust Development Shell"
+            echo "  Compose Dev Shell"
             echo "  ───────────────────────────"
-            echo "  Rust:        ${rustVersion}"
-            echo "  Nextest:     ${pkgs.cargo-nextest.version}"
+            echo "  rust         ${rustVersion} (sandbox)"
+            echo "  bun          ${pkgs.bun.version} (sandbox)"
             echo ""
-          '' + pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-            export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive"
           '';
         };
-      });
+
+      }
+    );
 }

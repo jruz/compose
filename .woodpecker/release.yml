@@ -7,16 +7,16 @@ steps:
     environment:
       REVISION: ${CI_COMMIT_SHA}
     commands:
-      - scripts/release-build.sh unknown-linux-musl x86_64
-      - scripts/release-build.sh unknown-linux-musl aarch64
+      - nix develop --command scripts/release-build.sh unknown-linux-musl x86_64
+      - nix develop --command scripts/release-build.sh unknown-linux-musl aarch64
 
   - name: BUILD_MACOS
     image: bash
     environment:
       REVISION: ${CI_COMMIT_SHA}
     commands:
-      - scripts/release-build.sh apple-darwin x86_64
-      - scripts/release-build.sh apple-darwin aarch64
+      - nix develop --command scripts/release-build.sh apple-darwin x86_64
+      - nix develop --command scripts/release-build.sh apple-darwin aarch64
 
   - name: RELEASE
     image: bash
