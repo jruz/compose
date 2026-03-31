@@ -26,6 +26,8 @@ Config schema:
       docker:                         # container driver (alternative to command)
         image: <string>               # docker image (required if no build)
         build: <string>               # build context path (required if no image)
+        build_args:                   # explicit --build-arg (default: resolved env)
+          KEY: \"VALUE\"
         dockerfile: <string>          # dockerfile path (optional)
         ports: [<host:container>]     # port mappings
         volumes: [<host:container>]   # volume mounts

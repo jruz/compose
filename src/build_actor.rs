@@ -1,9 +1,12 @@
+use std::collections::BTreeMap;
+
 use tokio::io::BufReader;
 use tokio::sync::mpsc;
 
 use crate::actor;
 use crate::config;
 use crate::docker;
+use crate::env;
 use crate::message;
 use crate::process;
 
@@ -14,6 +17,9 @@ pub enum Error {
 
     #[error(transparent)]
     Docker(#[from] docker::Error),
+
+    #[error(transparent)]
+    Env(#[from] env::Error),
 }
 
 pub async fn build(
@@ -21,6 +27,7 @@ pub async fn build(
     config: &config::Config,
     start_order: &[String],
     network: &str,
+    global_env: &BTreeMap<String, String>,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<(), Error> {
     for name in start_order {
@@ -40,12 +47,14 @@ pub async fn build(
         )?;
 
         let tag = docker::image_tag(network, name, docker_config.image.as_deref());
+        let build_args = resolve_build_args(docker_config, global_env, proc_def)?;
 
         let mut child = process::spawn_child(&mut docker::build_command(
             binary,
             &tag,
             build_context,
             docker_config.dockerfile.as_deref(),
+            &build_args,
         ))
         .map_err(|source| docker::Error::Build {
             context: build_context.clone(),
@@ -101,6 +110,17 @@ pub async fn build(
     }
 
     Ok(())
+}
+
+fn resolve_build_args(
+    docker_config: &config::DockerConfig,
+    global_env: &BTreeMap<String, String>,
+    proc_def: &config::ProcessDef,
+) -> Result<BTreeMap<String, String>, Error> {
+    match &docker_config.build_args {
+        Some(args) => Ok(args.clone()),
+        None => Ok(env::resolve(global_env, proc_def)?),
+    }
 }
 
 fn send_display(

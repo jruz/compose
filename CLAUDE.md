@@ -33,7 +33,7 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 - `actor.rs` - async loop: watches process, reports exit via ActorExited, responds to kill command, graceful shutdown (SIGTERM+SIGKILL for exec, docker stop for containers)
 - `process.rs` - spawns exec processes via `sh -c`, delegates to actor loop
 - `docker_actor.rs` - spawns docker containers via `docker run`, delegates to actor loop
-- `build_actor.rs` - builds docker images for processes with build contexts in dependency order
+- `build_actor.rs` - builds docker images for processes with build contexts in dependency order, passes build_args or resolved env as --build-arg
 - `docker.rs` - container CLI wrappers (build, run, exec, stop, rm, network), runtime-agnostic via binary parameter
 - `docker_infra.rs` - manages docker network creation, image building, and cleanup
 - `health.rs` - health check types, config parsing, and execution (shell command or exec form), called from startup.rs

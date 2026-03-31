@@ -77,6 +77,8 @@ pub enum Runtime {
 #[serde(deny_unknown_fields)]
 pub struct DockerConfig {
     pub build: Option<String>,
+    #[serde(default)]
+    pub build_args: Option<BTreeMap<String, String>>,
     pub dockerfile: Option<String>,
     pub image: Option<String>,
     #[serde(default)]
