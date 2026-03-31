@@ -141,12 +141,12 @@ release-bump VERSION:
     nu scripts/release-bump.nu {{ VERSION }}
 
 release-build-linux:
-    scripts/release-build.sh unknown-linux-gnu x86_64
-    scripts/release-build.sh unknown-linux-gnu aarch64
+    nu scripts/release-build.nu unknown-linux-musl x86_64
+    nu scripts/release-build.nu unknown-linux-musl aarch64
 
 release-build-macos:
-    scripts/release-build.sh apple-darwin x86_64
-    scripts/release-build.sh apple-darwin aarch64
+    nu scripts/release-build.nu apple-darwin x86_64
+    nu scripts/release-build.nu apple-darwin aarch64
 
 release-upload TAG:
     sandbox bun scripts/release-upload.ts {{ TAG }}
