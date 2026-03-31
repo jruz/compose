@@ -1,0 +1,7 @@
+processes:
+  build-args-main:
+    docker:
+      image: compose-test-build-args
+      build: ./app
+      build_args:
+        GREETING: hello-from-build-arg

@@ -162,6 +162,20 @@ processes:
         - "/absolute/path/to/src:/app/src"
 ```
 
+Pass explicit build args to `docker build`:
+
+```yaml
+processes:
+  app:
+    docker:
+      build: ./app
+      build_args:
+        NODE_VERSION: "22"
+        ENV: "development"
+```
+
+When `build_args` is omitted, all resolved env vars (inline `env`, `env_file`, global `--env-file`) are forwarded as `--build-arg`.
+
 ### Environment variables
 
 Inline per-process:
@@ -224,6 +238,8 @@ processes:
     docker: # presence of this section makes it a docker process
       image: <string> # docker image (required if no build)
       build: <string> # build context path (required if no image)
+      build_args: # explicit --build-arg map (default: resolved env vars)
+        KEY: "VALUE"
       dockerfile: <string> # dockerfile path (optional)
       ports: [<host:container>] # port mappings, supports ${VAR}
       volumes: [<host:container>] # volume mounts, supports ${VAR}

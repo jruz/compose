@@ -11,6 +11,13 @@ fn docker_build() {
 }
 
 #[test]
+fn docker_build_args() {
+    let output = run_docker_fixture("docker_build_args", "run");
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "baked: hello-from-build-arg");
+}
+
+#[test]
 fn docker_cleanup() {
     let output = run_docker_fixture("docker_cleanup", "run");
     assert_exit_code(&output, 0);

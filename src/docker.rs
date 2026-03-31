@@ -92,6 +92,7 @@ pub fn build_command(
     tag: &str,
     context: &str,
     dockerfile: Option<&str>,
+    build_args: &BTreeMap<String, String>,
 ) -> process::Command {
     let mut cmd = process::Command::new(binary);
     cmd.arg("build")
@@ -100,6 +101,9 @@ pub fn build_command(
         .arg(tag);
     if let Some(file) = dockerfile {
         cmd.arg("--file").arg(file);
+    }
+    for (key, value) in build_args {
+        cmd.arg("--build-arg").arg(format!("{key}={value}"));
     }
     cmd.arg(context);
     cmd.stdout(std::process::Stdio::piped())

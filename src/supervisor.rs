@@ -55,6 +55,8 @@ pub async fn run(
     let start_order = startup::resolve_start_order(&config);
     let shutdown = resolve_shutdown(&mode, &start_order)?;
     check_main_not_oneshot(&shutdown, &config)?;
+    let global_env = env::load_global(global_env_file.as_deref())?;
+
     let network_name = if has_docker {
         Some(
             docker_infra::setup(
@@ -62,6 +64,7 @@ pub async fn run(
                 &config,
                 &start_order,
                 project_name.as_deref(),
+                &global_env,
                 &display_tx,
             )
             .await?,
@@ -69,7 +72,6 @@ pub async fn run(
     } else {
         None
     };
-    let global_env = env::load_global(global_env_file.as_deref())?;
 
     let channels = startup::Channels {
         binary,

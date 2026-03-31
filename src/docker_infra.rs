@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use tokio::sync::mpsc;
 
 use crate::build_actor;
@@ -22,6 +24,7 @@ pub async fn setup(
     config: &config::Config,
     start_order: &[String],
     project_name: Option<&str>,
+    global_env: &BTreeMap<String, String>,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<String, Error> {
     let network = generate_network_name(project_name);
@@ -34,7 +37,15 @@ pub async fn setup(
     remove_containers(binary, config, start_order, &network, display_tx).await;
     docker::network_rm(binary, &network).await?;
     docker::network_create(binary, &network).await?;
-    build_actor::build(binary, config, start_order, &network, display_tx).await?;
+    build_actor::build(
+        binary,
+        config,
+        start_order,
+        &network,
+        global_env,
+        display_tx,
+    )
+    .await?;
     Ok(network)
 }
 
