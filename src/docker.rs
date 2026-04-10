@@ -231,7 +231,11 @@ pub async fn rm(binary: &str, name: &str) -> Result<(), Error> {
             return Err(Error::RmKilled);
         };
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(Error::RmFailed { code, stderr });
+        let already_gone =
+            stderr.contains("No such container") || stderr.contains("already in progress");
+        if !already_gone {
+            return Err(Error::RmFailed { code, stderr });
+        }
     }
 
     Ok(())
@@ -258,23 +262,35 @@ pub async fn network_create(binary: &str, name: &str) -> Result<(), Error> {
 }
 
 pub async fn network_rm(binary: &str, name: &str) -> Result<(), Error> {
-    let output = process::Command::new(binary)
-        .arg("network")
-        .arg("rm")
-        .arg(name)
-        .output()
-        .await
-        .map_err(|source| Error::NetworkRm { source })?;
+    const MAX_ATTEMPTS: u8 = 10;
+    const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
 
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let is_real_failure = !output.status.success() && !stderr.contains("not found");
+    let mut attempt = 0_u8;
+    loop {
+        let output = process::Command::new(binary)
+            .arg("network")
+            .arg("rm")
+            .arg(name)
+            .output()
+            .await
+            .map_err(|source| Error::NetworkRm { source })?;
 
-    if is_real_failure {
-        match output.status.code() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+        if output.status.success() || stderr.contains("not found") {
+            break;
+        }
+
+        attempt += 1;
+        if attempt < MAX_ATTEMPTS && stderr.contains("active endpoints") {
+            tokio::time::sleep(RETRY_DELAY).await;
+            continue;
+        }
+
+        return match output.status.code() {
             Some(code) => Err(Error::NetworkRmFailed { code, stderr }),
             None => Err(Error::NetworkRmKilled),
-        }
-    } else {
-        Ok(())
+        };
     }
+    Ok(())
 }
