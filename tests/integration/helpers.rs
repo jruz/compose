@@ -13,10 +13,12 @@ pub fn fixture_path(name: &str) -> PathBuf {
 }
 
 pub fn run_fixture(fixture: &str, subcommand: &str) -> Output {
-    match std::process::Command::new(binary_path())
+    let bin = binary_path();
+    let config = fixture_path(fixture);
+    match std::process::Command::new(bin)
         .arg(subcommand)
         .arg("--config")
-        .arg(fixture_path(fixture))
+        .arg(config)
         .output()
     {
         Ok(output) => output,
@@ -25,12 +27,15 @@ pub fn run_fixture(fixture: &str, subcommand: &str) -> Output {
 }
 
 pub fn run_with_env_file(fixture: &str, subcommand: &str, env_file: &str) -> Output {
-    match std::process::Command::new(binary_path())
+    let bin = binary_path();
+    let config = fixture_path(fixture);
+    let env = fixture_path(env_file);
+    match std::process::Command::new(bin)
         .arg(subcommand)
         .arg("--config")
-        .arg(fixture_path(fixture))
+        .arg(config)
         .arg("--env-file")
-        .arg(fixture_path(env_file))
+        .arg(env)
         .output()
     {
         Ok(output) => output,
@@ -40,7 +45,8 @@ pub fn run_with_env_file(fixture: &str, subcommand: &str, env_file: &str) -> Out
 
 pub fn run_docker_fixture(fixture_dir: &str, subcommand: &str) -> Output {
     let dir = fixture_path(fixture_dir);
-    match std::process::Command::new(binary_path())
+    let bin = binary_path();
+    match std::process::Command::new(bin)
         .arg(subcommand)
         .arg("--config")
         .arg("compose.yaml")
@@ -57,10 +63,10 @@ pub fn run_fixture_with_host_env(
     subcommand: &str,
     env_vars: &[(&str, &str)],
 ) -> Output {
-    let mut cmd = std::process::Command::new(binary_path());
-    cmd.arg(subcommand)
-        .arg("--config")
-        .arg(fixture_path(fixture));
+    let bin = binary_path();
+    let config = fixture_path(fixture);
+    let mut cmd = std::process::Command::new(bin);
+    cmd.arg(subcommand).arg("--config").arg(config);
     for (key, value) in env_vars {
         cmd.env(key, value);
     }
@@ -76,7 +82,8 @@ pub fn run_docker_fixture_with_host_env(
     env_vars: &[(&str, &str)],
 ) -> Output {
     let dir = fixture_path(fixture_dir);
-    let mut cmd = std::process::Command::new(binary_path());
+    let bin = binary_path();
+    let mut cmd = std::process::Command::new(bin);
     cmd.arg(subcommand)
         .arg("--config")
         .arg("compose.yaml")

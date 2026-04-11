@@ -22,13 +22,11 @@ pub fn emit_killing_all(
 ) -> Result<(), Error> {
     for actor in actors {
         if exclude.is_none_or(|name| actor.name != name) {
-            send_display(
-                display_tx,
-                message::DisplayMsg::Lifecycle(message::LifecycleMsg::Killing {
-                    name: actor.name.clone(),
-                    reason: reason.to_string(),
-                }),
-            )?;
+            let msg = message::DisplayMsg::Lifecycle(message::LifecycleMsg::Killing {
+                name: actor.name.clone(),
+                reason: reason.to_string(),
+            });
+            send_display(display_tx, msg)?;
         }
     }
     Ok(())

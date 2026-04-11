@@ -86,7 +86,8 @@ const main = async () => {
   if (!name) throw new Error("CI_REPO_NAME is not set");
 
   const glob = new Glob(`${name}-*`);
-  const files = Array.from(glob.scanSync("."));
+  const scanned = glob.scanSync(".");
+  const files = Array.from(scanned);
 
   if (files.length === 0) {
     log.error(`no ${name}-* files found`);
@@ -95,13 +96,12 @@ const main = async () => {
 
   const releaseId = await ensureRelease(tag, token, repo);
 
-  await Promise.all(
-    files.map(async (file) => {
-      log.info(`uploading ${file}...`);
-      await upload(file, releaseId, token, repo);
-      log.info(`uploaded ${file}`);
-    }),
-  );
+  const uploads = files.map(async (file) => {
+    log.info(`uploading ${file}...`);
+    await upload(file, releaseId, token, repo);
+    log.info(`uploaded ${file}`);
+  });
+  await Promise.all(uploads);
 
   log.info("release upload complete");
 };

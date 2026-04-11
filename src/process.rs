@@ -24,11 +24,13 @@ pub fn spawn_actor(
     display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<message::ActorHandle, Error> {
     let mut std_cmd = std::process::Command::new(shell);
+    let piped_out = std::process::Stdio::piped();
+    let piped_err = std::process::Stdio::piped();
     std_cmd
         .arg("-c")
         .arg(command)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        .stdout(piped_out)
+        .stderr(piped_err)
         .process_group(0);
 
     for (key, value) in env {
@@ -48,13 +50,8 @@ pub fn spawn_actor(
 
     let actor_name = name.to_string();
     let channels = actor::ActorChannels { cmd_rx, event_tx };
-    let handle = tokio::spawn(actor::actor_loop(
-        actor_name,
-        spawned,
-        channels,
-        drain,
-        actor::Driver::Exec,
-    ));
+    let actor_future = actor::actor_loop(actor_name, spawned, channels, drain, actor::Driver::Exec);
+    let handle = tokio::spawn(actor_future);
 
     Ok(message::ActorHandle {
         cmd_tx,

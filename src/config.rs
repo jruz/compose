@@ -153,14 +153,14 @@ pub fn parse_env_file(path: &Path) -> Result<BTreeMap<String, String>, Error> {
         source,
     })?;
 
-    content
-        .lines()
-        .enumerate()
+    let lines = content.lines().enumerate();
+    let init = BTreeMap::new();
+    lines
         .filter(|(_i, line)| {
             let trimmed = line.trim();
             !trimmed.is_empty() && !trimmed.starts_with('#')
         })
-        .try_fold(BTreeMap::new(), |mut acc, (i, line)| {
+        .try_fold(init, |mut acc, (i, line)| {
             let (key, value) = line
                 .split_once('=')
                 .ok_or_else(|| Error::EnvFileMalformed {
@@ -168,7 +168,9 @@ pub fn parse_env_file(path: &Path) -> Result<BTreeMap<String, String>, Error> {
                     line_number: i + 1,
                     line: line.to_string(),
                 })?;
-            acc.insert(key.trim().to_string(), value.trim().to_string());
+            let key_str = key.trim().to_string();
+            let value_str = value.trim().to_string();
+            acc.insert(key_str, value_str);
             Ok(acc)
         })
 }
@@ -206,8 +208,9 @@ fn check_circular_dependencies(config: &Config) -> Result<(), Error> {
     let mut path: Vec<&str> = Vec::new();
 
     for name in config.processes.keys() {
-        if !visited.contains(name.as_str()) {
-            detect_cycle(name.as_str(), &adj, &mut visited, &mut in_stack, &mut path)?;
+        let name_str = name.as_str();
+        if !visited.contains(name_str) {
+            detect_cycle(name_str, &adj, &mut visited, &mut in_stack, &mut path)?;
         }
     }
 
@@ -262,7 +265,8 @@ fn check_unknown_dependencies(config: &Config) -> Result<(), Error> {
     let names: HashSet<&str> = config.processes.keys().map(String::as_str).collect();
     for (name, proc_def) in &config.processes {
         for dep in &proc_def.depends_on {
-            if !names.contains(dep.as_str()) {
+            let dep_str = dep.as_str();
+            if !names.contains(dep_str) {
                 return Err(Error::UnknownDependency {
                     process: name.clone(),
                     dependency: dep.clone(),
@@ -288,7 +292,8 @@ fn detect_cycle<'graph>(
         for dep in deps {
             if in_stack.contains(dep) {
                 let cycle = format_cycle(path, dep);
-                return Err(Error::CircularDependency(cycle));
+                let err = Error::CircularDependency(cycle);
+                return Err(err);
             }
             if !visited.contains(dep) {
                 detect_cycle(dep, adj, visited, in_stack, path)?;

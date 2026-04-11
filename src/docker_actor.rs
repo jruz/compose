@@ -66,9 +66,8 @@ pub fn spawn_actor(
         container,
         stop_timeout_secs: run.stop_timeout_secs,
     };
-    let handle = tokio::spawn(actor::actor_loop(
-        actor_name, spawned, channels, drain, driver,
-    ));
+    let actor_future = actor::actor_loop(actor_name, spawned, channels, drain, driver);
+    let handle = tokio::spawn(actor_future);
 
     Ok(message::ActorHandle {
         cmd_tx,

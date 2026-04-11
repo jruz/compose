@@ -24,8 +24,9 @@ pub async fn manage(
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
     mut event_rx: mpsc::UnboundedReceiver<message::ActorExited>,
 ) -> Result<message::ExitResult, Error> {
-    let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
-        .map_err(|source| Error::SignalHandler { source })?;
+    let signal_kind = signal::unix::SignalKind::terminate();
+    let mut sigterm =
+        signal::unix::signal(signal_kind).map_err(|source| Error::SignalHandler { source })?;
 
     tokio::select! {
         Some(exited) = event_rx.recv() => {
@@ -60,12 +61,10 @@ fn handle_exited(
                     name: exited.name.clone(),
                 },
             )?;
-            shutdown::emit_killing_all(
-                actors,
-                Some(&exited.name),
-                &format!("{} exited", exited.name),
-                display_tx,
-            )?;
+            let reason = format!("{} exited", exited.name);
+            let name_ref = exited.name.as_str();
+            let exclude = Some(name_ref);
+            shutdown::emit_killing_all(actors, exclude, &reason, display_tx)?;
             shutdown::kill_all(actors);
             let failed_name = if exited.code == 0 {
                 None
@@ -79,12 +78,10 @@ fn handle_exited(
         }
         ShutdownStrategy::MainProcess(_) | ShutdownStrategy::AnyExit => {
             send_crashed(display_tx, &exited.name, exited.code, &exited.stderr_lines)?;
-            shutdown::emit_killing_all(
-                actors,
-                Some(&exited.name),
-                &format!("{} crashed", exited.name),
-                display_tx,
-            )?;
+            let reason = format!("{} crashed", exited.name);
+            let name_ref = exited.name.as_str();
+            let exclude = Some(name_ref);
+            shutdown::emit_killing_all(actors, exclude, &reason, display_tx)?;
             shutdown::kill_all(actors);
             Ok(message::ExitResult {
                 code: 1,
@@ -98,7 +95,8 @@ fn send_lifecycle(
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
     msg: message::LifecycleMsg,
 ) -> Result<(), shutdown::Error> {
-    shutdown::send_display(display_tx, message::DisplayMsg::Lifecycle(msg))
+    let display_msg = message::DisplayMsg::Lifecycle(msg);
+    shutdown::send_display(display_tx, display_msg)
 }
 
 fn send_crashed(

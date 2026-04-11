@@ -22,12 +22,14 @@ const sendRequest = async (index: number): Promise<void> => {
 const main = async () => {
   log.info(`traffic generator: ${TOTAL} requests to ${API}`);
 
-  await Array.from({ length: TOTAL }, (_, i) => i).reduce(
+  const indices = Array.from({ length: TOTAL }, (_, i) => i);
+  const initial = Promise.resolve();
+  await indices.reduce(
     async (prev, i) => {
       await prev;
       await sendRequest(i);
     },
-    Promise.resolve(),
+    initial,
   );
 
   log.info("traffic generation complete");

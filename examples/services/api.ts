@@ -18,11 +18,12 @@ const ROUTES: readonly Route[] = [
 
 const runMigrations = async () => {
   log.info("running migrations...");
+  const initialPromise = Promise.resolve();
   await MIGRATIONS.reduce(async (prev, m) => {
     await prev;
     await Bun.sleep(200);
     log.info(`  applied ${m}`);
-  }, Promise.resolve());
+  }, initialPromise);
   log.info(`migrations complete (${MIGRATIONS.length} applied)`);
 };
 

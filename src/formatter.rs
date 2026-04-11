@@ -128,7 +128,10 @@ fn lookup_style(styles: &[(String, Style)], name: &str) -> Result<Style, Error> 
         .iter()
         .find(|(nm, _style)| nm == name)
         .map(|(_nm, style)| *style)
-        .ok_or_else(|| Error::UnknownProcess(name.to_string()))
+        .ok_or_else(|| {
+            let name_owned = name.to_string();
+            Error::UnknownProcess(name_owned)
+        })
 }
 
 fn make_tag(name: &str, style: Style) -> String {
@@ -136,7 +139,8 @@ fn make_tag(name: &str, style: Style) -> String {
 }
 
 fn color_for_index(index: usize) -> Style {
-    let wrapped = index.checked_rem(COLORS.len());
+    let color_count = COLORS.len();
+    let wrapped = index.checked_rem(color_count);
     match wrapped {
         Some(pos) => match COLORS.get(pos) {
             Some(color_fn) => color_fn(),

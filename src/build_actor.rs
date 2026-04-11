@@ -41,31 +41,29 @@ pub async fn build(
             continue;
         };
 
-        send_display(
-            display_tx,
-            message::DisplayMsg::Docker(message::DockerMsg::Building { name: name.clone() }),
-        )?;
+        let building_msg =
+            message::DisplayMsg::Docker(message::DockerMsg::Building { name: name.clone() });
+        send_display(display_tx, building_msg)?;
 
-        let tag = docker::image_tag(network, name, docker_config.image.as_deref());
+        let image = docker_config.image.as_deref();
+        let tag = docker::image_tag(network, name, image);
         let build_args = resolve_build_args(docker_config, global_env, proc_def)?;
 
-        let mut child = process::spawn_child(&mut docker::build_command(
-            binary,
-            &tag,
-            build_context,
-            docker_config.dockerfile.as_deref(),
-            &build_args,
-        ))
-        .map_err(|source| docker::Error::Build {
-            context: build_context.clone(),
-            source,
-        })?;
+        let dockerfile = docker_config.dockerfile.as_deref();
+        let mut build_cmd =
+            docker::build_command(binary, &tag, build_context, dockerfile, &build_args);
+        let mut child =
+            process::spawn_child(&mut build_cmd).map_err(|source| docker::Error::Build {
+                context: build_context.clone(),
+                source,
+            })?;
 
         let stdout_handle = child.stdout.take().map(|stdout| {
             let tx = display_tx.clone();
             let proc_name = name.clone();
             tokio::spawn(async move {
-                actor::stream_lines(&proc_name, BufReader::new(stdout), &tx).await;
+                let buffered_stdout = BufReader::new(stdout);
+                actor::stream_lines(&proc_name, buffered_stdout, &tx).await;
             })
         });
 
@@ -73,7 +71,8 @@ pub async fn build(
             let tx = display_tx.clone();
             let proc_name = name.clone();
             tokio::spawn(async move {
-                actor::stream_lines(&proc_name, BufReader::new(stderr), &tx).await;
+                let buffered_stderr = BufReader::new(stderr);
+                actor::stream_lines(&proc_name, buffered_stderr, &tx).await;
             })
         });
 
@@ -91,22 +90,23 @@ pub async fn build(
 
         if !status.success() {
             let Some(code) = status.code() else {
-                return Err(docker::Error::BuildKilled {
+                let err = docker::Error::BuildKilled {
                     context: build_context.clone(),
-                }
-                .into());
+                };
+                let err: Error = err.into();
+                return Err(err);
             };
-            return Err(docker::Error::BuildFailed {
+            let err = docker::Error::BuildFailed {
                 context: build_context.clone(),
                 code,
-            }
-            .into());
+            };
+            let err: Error = err.into();
+            return Err(err);
         }
 
-        send_display(
-            display_tx,
-            message::DisplayMsg::Docker(message::DockerMsg::Built { name: name.clone() }),
-        )?;
+        let built_msg =
+            message::DisplayMsg::Docker(message::DockerMsg::Built { name: name.clone() });
+        send_display(display_tx, built_msg)?;
     }
 
     Ok(())
@@ -117,9 +117,12 @@ fn resolve_build_args(
     global_env: &BTreeMap<String, String>,
     proc_def: &config::ProcessDef,
 ) -> Result<BTreeMap<String, String>, Error> {
-    match &docker_config.build_args {
-        Some(args) => Ok(args.clone()),
-        None => Ok(env::resolve(global_env, proc_def)?),
+    if let Some(args) = &docker_config.build_args {
+        let cloned = args.clone();
+        Ok(cloned)
+    } else {
+        let resolved = env::resolve(global_env, proc_def)?;
+        Ok(resolved)
     }
 }
 

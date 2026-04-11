@@ -2,10 +2,8 @@ use super::helpers::*;
 
 #[test]
 fn version_flag() {
-    let output = match std::process::Command::new(binary_path())
-        .arg("--version")
-        .output()
-    {
+    let bin = binary_path();
+    let output = match std::process::Command::new(bin).arg("--version").output() {
         Ok(output) => output,
         Err(err) => panic!("failed to execute binary: {err}"),
     };

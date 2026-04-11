@@ -12,8 +12,13 @@ const run = async (
 const lines = (output: string): string[] =>
   output.split("\n").filter((l) => l !== "");
 
-const removeAll = (ids: string[], cmd: (id: string) => string[]) =>
-  Promise.all(ids.map((id) => run(cmd(id))));
+const removeAll = (ids: string[], cmd: (id: string) => string[]) => {
+  const runs = ids.map((id) => {
+    const args = cmd(id);
+    return run(args);
+  });
+  return Promise.all(runs);
+};
 
 const cleanContainers = async () => {
   const result = await run([
