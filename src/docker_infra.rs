@@ -23,7 +23,7 @@ pub async fn setup(
     binary: &str,
     config: &config::Config,
     start_order: &[String],
-    project_name: Option<&str>,
+    project_name: &str,
     global_env: &BTreeMap<String, String>,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<String, Error> {
@@ -108,11 +108,9 @@ async fn remove_containers(
     }
 }
 
-fn generate_network_name(project_name: Option<&str>) -> String {
-    match project_name {
-        Some(name) => format!("compose-{name}"),
-        None => format!("compose-{}", std::process::id()),
-    }
+fn generate_network_name(project_name: &str) -> String {
+    let pid = std::process::id();
+    format!("{project_name}-{pid}")
 }
 
 fn send_display(

@@ -44,15 +44,20 @@ async fn main() -> ExitCode {
     let (log_tx, mut log_rx) = mpsc::unbounded_channel();
 
     let global_env_file = cli::env_file_path(&cli.command).cloned();
-    let project_name = match cli::config_path(&cli.command).canonicalize() {
-        Ok(path) => path
-            .parent()
-            .and_then(std::path::Path::file_name)
-            .map(|name| name.to_string_lossy().to_string()),
+    let config_dir = match cli::config_path(&cli.command).canonicalize() {
+        Ok(path) => path,
         Err(err) => {
             eprintln!("failed to resolve config path: {err}");
-            None
+            return ExitCode::from(1);
         }
+    };
+    let Some(project_name) = config_dir
+        .parent()
+        .and_then(std::path::Path::file_name)
+        .map(|name| name.to_string_lossy().to_string())
+    else {
+        eprintln!("failed to resolve project name from config path");
+        return ExitCode::from(1);
     };
     let supervisor_future =
         supervisor::run(config, cli.command, global_env_file, project_name, log_tx);
