@@ -32,7 +32,8 @@ async fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
-    let config = match config::load(cli::config_path(&cli.command)) {
+    let config_path = cli::config_path(&cli.command);
+    let config = match config::load(config_path) {
         Ok(config) => config,
         Err(err) => {
             println!("{}", formatter::render_error_msg(&err.to_string()));
@@ -53,13 +54,9 @@ async fn main() -> ExitCode {
             None
         }
     };
-    let supervisor = tokio::spawn(supervisor::run(
-        config,
-        cli.command,
-        global_env_file,
-        project_name,
-        log_tx,
-    ));
+    let supervisor_future =
+        supervisor::run(config, cli.command, global_env_file, project_name, log_tx);
+    let supervisor = tokio::spawn(supervisor_future);
 
     while let Some(line) = log_rx.recv().await {
         println!("{line}");

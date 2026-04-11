@@ -48,7 +48,8 @@ pub fn setup_output_drain(
         let tx = display_tx.clone();
         let proc_name = name.to_string();
         tokio::spawn(async move {
-            stream_lines(&proc_name, BufReader::new(stdout), &tx).await;
+            let buffered_stdout = BufReader::new(stdout);
+            stream_lines(&proc_name, buffered_stdout, &tx).await;
             match stdout_done_tx.send(()) {
                 Ok(()) | Err(()) => {}
             }
@@ -62,30 +63,30 @@ pub fn setup_output_drain(
     if let Some(stderr) = stderr {
         let proc_name = name.to_string();
         tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
+            let buffered_stderr = BufReader::new(stderr);
+            let mut lines = buffered_stderr.lines();
             loop {
                 match lines.next_line().await {
                     Ok(Some(line)) => {
-                        match stderr_cap_tx.send(line.clone()) {
+                        let line_copy = line.clone();
+                        match stderr_cap_tx.send(line_copy) {
                             Ok(()) | Err(_) => {}
                         }
-                        if let Err(_send_err) =
-                            display_tx.send(message::DisplayMsg::Output(message::OutputMsg::Line {
-                                line,
-                                name: proc_name.clone(),
-                            }))
-                        {
+                        let output_msg = message::DisplayMsg::Output(message::OutputMsg::Line {
+                            line,
+                            name: proc_name.clone(),
+                        });
+                        if let Err(_send_err) = display_tx.send(output_msg) {
                             break;
                         }
                     }
                     Ok(None) => break,
                     Err(err) => {
-                        if let Err(_send_err) =
-                            display_tx.send(message::DisplayMsg::Output(message::OutputMsg::Line {
-                                line: format!("[pipe error: {err}]"),
-                                name: proc_name.clone(),
-                            }))
-                        {}
+                        let error_msg = message::DisplayMsg::Output(message::OutputMsg::Line {
+                            line: format!("[pipe error: {err}]"),
+                            name: proc_name.clone(),
+                        });
+                        if let Err(_send_err) = display_tx.send(error_msg) {}
                         break;
                     }
                 }
@@ -144,11 +145,12 @@ pub async fn actor_loop(
     let code = exit_code_from_status(status);
     let stderr_lines = drain_stderr(&mut stderr_rx).await;
 
-    drop(event_tx.send(message::ActorExited {
+    let send_result = event_tx.send(message::ActorExited {
         code,
         name,
         stderr_lines,
-    }));
+    });
+    drop(send_result);
 }
 
 async fn kill_process(driver: &Driver, child: &mut tokio::process::Child) {
@@ -217,23 +219,21 @@ pub async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
     loop {
         match lines.next_line().await {
             Ok(Some(line)) => {
-                if let Err(_send_err) =
-                    display_tx.send(message::DisplayMsg::Output(message::OutputMsg::Line {
-                        line,
-                        name: name.to_string(),
-                    }))
-                {
+                let output_msg = message::DisplayMsg::Output(message::OutputMsg::Line {
+                    line,
+                    name: name.to_string(),
+                });
+                if let Err(_send_err) = display_tx.send(output_msg) {
                     break;
                 }
             }
             Ok(None) => break,
             Err(err) => {
-                if let Err(_send_err) =
-                    display_tx.send(message::DisplayMsg::Output(message::OutputMsg::Line {
-                        line: format!("[pipe error: {err}]"),
-                        name: name.to_string(),
-                    }))
-                {}
+                let error_msg = message::DisplayMsg::Output(message::OutputMsg::Line {
+                    line: format!("[pipe error: {err}]"),
+                    name: name.to_string(),
+                });
+                if let Err(_send_err) = display_tx.send(error_msg) {}
                 break;
             }
         }

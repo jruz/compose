@@ -21,9 +21,18 @@ pub enum HealthDriver {
 
 pub fn parse_config(hc: &config::HealthCheck) -> HealthConfig {
     let command = match (&hc.command, &hc.exec) {
-        (Some(shell_cmd), _) => HealthCommand::Shell(shell_cmd.clone()),
-        (_, Some(exec)) => HealthCommand::Exec(exec.clone()),
-        (None, None) => HealthCommand::Shell(String::new()),
+        (Some(shell_cmd), _) => {
+            let cloned = shell_cmd.clone();
+            HealthCommand::Shell(cloned)
+        }
+        (_, Some(exec)) => {
+            let cloned = exec.clone();
+            HealthCommand::Exec(cloned)
+        }
+        (None, None) => {
+            let empty = String::new();
+            HealthCommand::Shell(empty)
+        }
     };
     HealthConfig {
         command,

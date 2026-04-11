@@ -84,7 +84,8 @@ pub struct ExitResult {
 }
 
 pub fn kill_actor(actor: &ActorHandle) {
-    drop(actor.cmd_tx.send(Command::Kill));
+    let result = actor.cmd_tx.send(Command::Kill);
+    drop(result);
 }
 
 pub fn display_msg_name(msg: &DisplayMsg) -> &str {

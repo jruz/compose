@@ -55,20 +55,21 @@ pub async fn run(
     let start_order = startup::resolve_start_order(&config);
     let shutdown = resolve_shutdown(&mode, &start_order)?;
     check_main_not_oneshot(&shutdown, &config)?;
-    let global_env = env::load_global(global_env_file.as_deref())?;
+    let env_path = global_env_file.as_deref();
+    let global_env = env::load_global(env_path)?;
 
     let network_name = if has_docker {
-        Some(
-            docker_infra::setup(
-                binary,
-                &config,
-                &start_order,
-                project_name.as_deref(),
-                &global_env,
-                &display_tx,
-            )
-            .await?,
+        let project = project_name.as_deref();
+        let network = docker_infra::setup(
+            binary,
+            &config,
+            &start_order,
+            project,
+            &global_env,
+            &display_tx,
         )
+        .await?;
+        Some(network)
     } else {
         None
     };
@@ -78,13 +79,14 @@ pub async fn run(
         display: display_tx.clone(),
         events: event_tx.clone(),
     };
+    let network_ref = network_name.as_deref();
     let (startup_result, actors) = startup::start_all(
         &config,
         &start_order,
         &global_env,
         &channels,
         &mut event_rx,
-        network_name.as_deref(),
+        network_ref,
     )
     .await?;
     let result = run_lifecycle(
@@ -103,14 +105,16 @@ pub async fn run(
     }
     drop(channels);
     drop(display_tx);
-    drop(formatter_handle.await);
+    let formatter_result = formatter_handle.await;
+    drop(formatter_result);
     result
 }
 
 fn display_names(config: &config::Config, has_docker: bool, runtime_label: &str) -> Vec<String> {
     let mut names: Vec<String> = config.processes.keys().cloned().collect();
     if has_docker {
-        names.push(runtime_label.to_string());
+        let label = runtime_label.to_string();
+        names.push(label);
     }
     names
 }
@@ -153,12 +157,12 @@ async fn await_actor_shutdown(
     })
     .await
     {
-        drop(display_tx.send(message::DisplayMsg::Lifecycle(
-            message::LifecycleMsg::Killing {
-                name: "supervisor".to_string(),
-                reason: format!("actor shutdown timed out after {elapsed}"),
-            },
-        )));
+        let msg = message::DisplayMsg::Lifecycle(message::LifecycleMsg::Killing {
+            name: "supervisor".to_string(),
+            reason: format!("actor shutdown timed out after {elapsed}"),
+        });
+        let send_result = display_tx.send(msg);
+        drop(send_result);
         actor_set.abort_all();
     }
 }
@@ -171,7 +175,8 @@ fn check_main_not_oneshot(
         if config.processes.get(name).is_some_and(|proc| proc.process_type == config::ProcessType::Oneshot)
     );
     if let (true, lifecycle::ShutdownStrategy::MainProcess(name)) = (is_oneshot, shutdown) {
-        Err(config::Error::LastProcessOneshot { name: name.clone() }.into())
+        let err: Error = config::Error::LastProcessOneshot { name: name.clone() }.into();
+        Err(err)
     } else {
         Ok(())
     }
@@ -189,7 +194,8 @@ fn resolve_shutdown(
                     name: "main".to_string(),
                 })?
                 .clone();
-            Ok(lifecycle::ShutdownStrategy::MainProcess(main))
+            let strategy = lifecycle::ShutdownStrategy::MainProcess(main);
+            Ok(strategy)
         }
         cli::Command::Up(_) => Ok(lifecycle::ShutdownStrategy::AnyExit),
     }

@@ -72,7 +72,8 @@ fn oneshot_health() {
 
 #[test]
 fn missing_file() {
-    let output = match std::process::Command::new(binary_path())
+    let bin = binary_path();
+    let output = match std::process::Command::new(bin)
         .arg("run")
         .arg("--config")
         .arg("/tmp/nonexistent_compose_file_12345.yaml")

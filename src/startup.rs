@@ -79,13 +79,14 @@ pub fn resolve_start_order(config: &config::Config) -> Vec<String> {
             let Some(proc_def) = config.processes.get(name) else {
                 return false;
             };
-            let all_deps_resolved = proc_def
-                .depends_on
-                .iter()
-                .all(|dep| resolved.contains(dep.as_str()));
+            let all_deps_resolved = proc_def.depends_on.iter().all(|dep| {
+                let dep_str = dep.as_str();
+                resolved.contains(dep_str)
+            });
 
             if all_deps_resolved {
-                order.push(name.to_string());
+                let owned = name.to_string();
+                order.push(owned);
                 resolved.insert(name);
                 progress = true;
                 false
@@ -232,10 +233,12 @@ async fn handle_oneshot(
                 },
             )?;
             shutdown::kill_all(actors);
-            Ok(Some(StartupResult::CrashedDuringStartup {
+            let result = StartupResult::CrashedDuringStartup {
                 code: 1,
                 failed_name: name.to_string(),
-            }))
+            };
+            let option = Some(result);
+            Ok(option)
         }
         OneshotOutcome::OtherCrashed {
             crashed_name,
@@ -249,7 +252,8 @@ async fn handle_oneshot(
                 actors,
                 display_tx,
             )?;
-            Ok(Some(result))
+            let option = Some(result);
+            Ok(option)
         }
     }
 }
@@ -386,7 +390,8 @@ fn spawn_process_actor(
         .as_ref()
         .map(|args| args.iter().map(|arg| env::expand_vars(arg, env)).collect());
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
-        let image = docker::image_tag(net, name, docker_config.image.as_deref());
+        let image_ref = docker_config.image.as_deref();
+        let image = docker::image_tag(net, name, image_ref);
         let ports: Vec<String> = docker_config
             .ports
             .iter()
@@ -409,23 +414,18 @@ fn spawn_process_actor(
             stop_timeout_secs: docker_config.stop_timeout_secs,
             volumes: &volumes,
         };
-        Ok(docker_actor::spawn_actor(
-            &run_config,
-            channels.events.clone(),
-            channels.display.clone(),
-        )?)
+        let events = channels.events.clone();
+        let display = channels.display.clone();
+        let actor = docker_actor::spawn_actor(&run_config, events, display)?;
+        Ok(actor)
     } else {
         let expanded_command = expanded_command.ok_or_else(|| Error::MissingCommand {
             name: name.to_string(),
         })?;
-        Ok(process::spawn_actor(
-            name,
-            &expanded_command,
-            shell,
-            env,
-            channels.events.clone(),
-            channels.display.clone(),
-        )?)
+        let events = channels.events.clone();
+        let display = channels.display.clone();
+        let actor = process::spawn_actor(name, &expanded_command, shell, env, events, display)?;
+        Ok(actor)
     }
 }
 
@@ -437,12 +437,9 @@ fn handle_crash_during_startup(
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<StartupResult, Error> {
     send_crashed(display_tx, crashed_name, code, stderr_lines)?;
-    shutdown::emit_killing_all(
-        actors,
-        Some(crashed_name),
-        &format!("{crashed_name} crashed"),
-        display_tx,
-    )?;
+    let reason = format!("{crashed_name} crashed");
+    let exclude = Some(crashed_name);
+    shutdown::emit_killing_all(actors, exclude, &reason, display_tx)?;
     shutdown::kill_all(actors);
     Ok(StartupResult::CrashedDuringStartup {
         code: 1,
@@ -454,7 +451,8 @@ fn send_lifecycle(
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
     msg: message::LifecycleMsg,
 ) -> Result<(), Error> {
-    shutdown::send_display(display_tx, message::DisplayMsg::Lifecycle(msg)).map_err(Error::from)
+    let display_msg = message::DisplayMsg::Lifecycle(msg);
+    shutdown::send_display(display_tx, display_msg).map_err(Error::from)
 }
 
 fn send_crashed(

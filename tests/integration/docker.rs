@@ -210,12 +210,14 @@ fn docker_volumes() {
     let compose_content = format!(
         "processes:\n  vol-main:\n    docker:\n      image: compose-test-vol-main\n      build: ./app\n      volumes:\n        - \"{vol}:/mnt/data\"\n"
     );
-    match std::fs::write(dir.join("compose.yaml"), compose_content) {
+    let compose_path = dir.join("compose.yaml");
+    match std::fs::write(compose_path, compose_content) {
         Ok(()) => {}
         Err(err) => panic!("failed to write compose.yaml: {err}"),
     }
 
-    let output = match std::process::Command::new(binary_path())
+    let bin = binary_path();
+    let output = match std::process::Command::new(bin)
         .arg("run")
         .arg("--config")
         .arg("compose.yaml")
@@ -239,13 +241,15 @@ fn docker_volume_expansion_from_host_env() {
 
     let dir = fixture_path("docker_volume_expansion");
     let compose_content = "processes:\n  vol-host:\n    docker:\n      image: compose-test-vol-host\n      build: ./app\n      volumes:\n        - \"${VOLUME_HOST_DIR}:/mnt/data\"\n";
-    match std::fs::write(dir.join("compose_host.yaml"), compose_content) {
+    let compose_path = dir.join("compose_host.yaml");
+    match std::fs::write(compose_path, compose_content) {
         Ok(()) => {}
         Err(err) => panic!("failed to write compose yaml: {err}"),
     }
 
     let output = {
-        let mut cmd = std::process::Command::new(binary_path());
+        let bin = binary_path();
+        let mut cmd = std::process::Command::new(bin);
         cmd.arg("run")
             .arg("--config")
             .arg("compose_host.yaml")
@@ -257,7 +261,8 @@ fn docker_volume_expansion_from_host_env() {
         }
     };
 
-    match std::fs::remove_file(dir.join("compose_host.yaml")) {
+    let host_cleanup = dir.join("compose_host.yaml");
+    match std::fs::remove_file(host_cleanup) {
         Ok(()) => {}
         Err(err) => panic!("failed to clean up compose yaml: {err}"),
     }
@@ -276,12 +281,14 @@ fn docker_volume_expansion_from_process_env() {
     let compose_content = format!(
         "processes:\n  vol-proc:\n    docker:\n      image: compose-test-vol-proc\n      build: ./app\n      volumes:\n        - \"${{DATA_PATH}}:/mnt/data\"\n    env:\n      DATA_PATH: \"{vol}\"\n"
     );
-    match std::fs::write(dir.join("compose_proc.yaml"), compose_content) {
+    let compose_path = dir.join("compose_proc.yaml");
+    match std::fs::write(compose_path, compose_content) {
         Ok(()) => {}
         Err(err) => panic!("failed to write compose yaml: {err}"),
     }
 
-    let output = match std::process::Command::new(binary_path())
+    let bin = binary_path();
+    let output = match std::process::Command::new(bin)
         .arg("run")
         .arg("--config")
         .arg("compose_proc.yaml")
@@ -292,7 +299,8 @@ fn docker_volume_expansion_from_process_env() {
         Err(err) => panic!("failed to execute binary: {err}"),
     };
 
-    match std::fs::remove_file(dir.join("compose_proc.yaml")) {
+    let proc_cleanup = dir.join("compose_proc.yaml");
+    match std::fs::remove_file(proc_cleanup) {
         Ok(()) => {}
         Err(err) => panic!("failed to clean up compose yaml: {err}"),
     }
@@ -306,12 +314,14 @@ fn docker_volume_expansion_from_process_env() {
 fn docker_volume_expansion_undefined_stays_literal() {
     let dir = fixture_path("docker_volume_expansion");
     let compose_content = "processes:\n  vol-undef:\n    docker:\n      image: compose-test-vol-undef\n      build: ./app\n      volumes:\n        - \"${UNDEFINED_VAR_XYZZY}:/mnt/data\"\n";
-    match std::fs::write(dir.join("compose_undef.yaml"), compose_content) {
+    let compose_path = dir.join("compose_undef.yaml");
+    match std::fs::write(compose_path, compose_content) {
         Ok(()) => {}
         Err(err) => panic!("failed to write compose yaml: {err}"),
     }
 
-    let output = match std::process::Command::new(binary_path())
+    let bin = binary_path();
+    let output = match std::process::Command::new(bin)
         .arg("run")
         .arg("--config")
         .arg("compose_undef.yaml")
@@ -322,7 +332,8 @@ fn docker_volume_expansion_undefined_stays_literal() {
         Err(err) => panic!("failed to execute binary: {err}"),
     };
 
-    match std::fs::remove_file(dir.join("compose_undef.yaml")) {
+    let undef_cleanup = dir.join("compose_undef.yaml");
+    match std::fs::remove_file(undef_cleanup) {
         Ok(()) => {}
         Err(err) => panic!("failed to clean up compose yaml: {err}"),
     }

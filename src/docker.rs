@@ -106,8 +106,9 @@ pub fn build_command(
         cmd.arg("--build-arg").arg(format!("{key}={value}"));
     }
     cmd.arg(context);
-    cmd.stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
+    let piped_out = std::process::Stdio::piped();
+    let piped_err = std::process::Stdio::piped();
+    cmd.stdout(piped_out).stderr(piped_err);
     cmd
 }
 
@@ -152,9 +153,9 @@ pub fn run_command(binary: &str, run: &RunConfig<'_>) -> std::process::Command {
         (None, None) => {}
     }
 
-    cmd.stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .process_group(0);
+    let piped_out = std::process::Stdio::piped();
+    let piped_err = std::process::Stdio::piped();
+    cmd.stdout(piped_out).stderr(piped_err).process_group(0);
 
     cmd
 }
@@ -192,7 +193,8 @@ pub async fn stop(binary: &str, name: &str, timeout_secs: Option<u64>) -> Result
     let mut cmd = process::Command::new(binary);
     cmd.arg("stop");
     if let Some(secs) = timeout_secs {
-        cmd.arg("--time").arg(secs.to_string());
+        let secs_str = secs.to_string();
+        cmd.arg("--time").arg(secs_str);
     }
     cmd.arg(name);
     let output = cmd.output().await.map_err(|source| Error::Stop {
