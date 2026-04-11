@@ -6,8 +6,8 @@ def main [version: string] {
         exit 1
     }
     let current = (open Cargo.toml | get package.version)
-    ^cargo set-version $version
-    ^cargo generate-lockfile
+    ^sandbox cargo set-version $version
+    ^sandbox cargo generate-lockfile
     ^git add Cargo.toml Cargo.lock
     ^git commit --message $"[tool] Version: Bump to ($version)"
     log ok $"Bumped ($current) -> ($version)"
