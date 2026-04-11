@@ -41,7 +41,7 @@ pub async fn run(
     config: config::Config,
     mode: cli::Command,
     global_env_file: Option<PathBuf>,
-    project_name: Option<String>,
+    project_name: String,
     log_tx: mpsc::UnboundedSender<String>,
 ) -> Result<message::ExitResult, Error> {
     let has_docker = config.processes.values().any(|proc| proc.docker.is_some());
@@ -59,7 +59,7 @@ pub async fn run(
     let global_env = env::load_global(env_path)?;
 
     let network_name = if has_docker {
-        let project = project_name.as_deref();
+        let project = &project_name;
         let network = docker_infra::setup(
             binary,
             &config,
