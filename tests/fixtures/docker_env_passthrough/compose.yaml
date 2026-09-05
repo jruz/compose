@@ -1,7 +1,7 @@
 processes:
   passthrough:
     docker:
-      image: compose-test-passthrough
+      image: compose-test-passthrough:1
       build: ./app
     env:
       MY_VAR: "${MY_VAR}"

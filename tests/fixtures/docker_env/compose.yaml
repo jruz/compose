@@ -1,12 +1,12 @@
 processes:
   env-bg:
     docker:
-      image: compose-test-env-bg
+      image: compose-test-env-bg:1
       build: ./bg
 
   env-main:
     docker:
-      image: compose-test-env-main
+      image: compose-test-env-main:1
       build: ./main
     env:
       MY_VAR: "hello-from-env"

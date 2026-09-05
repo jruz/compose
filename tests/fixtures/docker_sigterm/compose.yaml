@@ -1,7 +1,7 @@
 processes:
   sig-server:
     docker:
-      image: compose-test-sig-server
+      image: compose-test-sig-server:1
       build: ./server
     health:
       command: "true"

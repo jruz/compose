@@ -1,7 +1,7 @@
 processes:
   diamond-db:
     docker:
-      image: compose-test-diamond-db
+      image: compose-test-diamond-db:1
       build: ./db
     health:
       command: "true"
@@ -10,7 +10,7 @@ processes:
 
   diamond-cache:
     docker:
-      image: compose-test-diamond-cache
+      image: compose-test-diamond-cache:1
       build: ./cache
     health:
       command: "true"
@@ -19,6 +19,6 @@ processes:
 
   diamond-app:
     docker:
-      image: compose-test-diamond-app
+      image: compose-test-diamond-app:1
       build: ./app
     depends_on: [diamond-db, diamond-cache]

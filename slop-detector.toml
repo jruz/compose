@@ -3,4 +3,7 @@ rules = []
 files = []
 
 [ignore.by-rule]
+no-env-passthrough = [
+    "./tests/fixtures/docker_env_passthrough/compose.yaml",
+]
 no-spawn = ["./src/process.rs", "./src/supervisor.rs"]
