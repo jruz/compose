@@ -1,7 +1,7 @@
 processes:
   hc-service:
     docker:
-      image: compose-test-hc-service
+      image: compose-test-hc-service:1
       build: ./service
     health:
       command: "cat /tmp/healthy"
@@ -10,6 +10,6 @@ processes:
 
   hc-consumer:
     docker:
-      image: compose-test-hc-consumer
+      image: compose-test-hc-consumer:1
       build: ./consumer
     depends_on: [hc-service]

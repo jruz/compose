@@ -1,6 +1,6 @@
 processes:
   custom-df:
     docker:
-      image: compose-test-custom-df
+      image: compose-test-custom-df:1
       build: .
       dockerfile: Dockerfile.custom

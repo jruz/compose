@@ -1,10 +1,10 @@
 processes:
   cleanup-bg:
     docker:
-      image: compose-test-cleanup-bg
+      image: compose-test-cleanup-bg:1
       build: ./worker
 
   cleanup-main:
     docker:
-      image: compose-test-cleanup-main
+      image: compose-test-cleanup-main:1
       build: ./main
