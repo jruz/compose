@@ -157,6 +157,50 @@ fn docker_sigterm() {
     );
 }
 
+#[test]
+fn interrupt_during_docker_health_check_cleans_up_resources() {
+    let fixture = "docker_interrupt_health";
+    let output = interrupt_docker_fixture_after_container_starts(fixture, "up", "startup-service");
+    let network = format!("{fixture}-{}", output.pid);
+    let container = format!("{network}-startup-service");
+    let container_exists = docker_resource_exists(&["container", "inspect", &container]);
+    let network_exists = docker_resource_exists(&["network", "inspect", &network]);
+    if container_exists {
+        docker_resource_cleanup(&["rm", "--force", &container]);
+    }
+    if network_exists {
+        docker_resource_cleanup(&["network", "rm", &network]);
+    }
+
+    let expected_code: i32 = 130;
+    assert_eq!(output.status.code(), Some(expected_code));
+    assert!(!container_exists, "container survived compose shutdown");
+    assert!(!network_exists, "network survived compose shutdown");
+}
+
+fn docker_resource_exists(args: &[&str]) -> bool {
+    let mut command = std::process::Command::new("docker");
+    command.args(args);
+    match command.output() {
+        Ok(output) => output.status.success(),
+        Err(err) => panic!("failed to inspect Docker resource: {err}"),
+    }
+}
+
+fn docker_resource_cleanup(args: &[&str]) {
+    let mut command = std::process::Command::new("docker");
+    command.args(args);
+    let output = match command.output() {
+        Ok(output) => output,
+        Err(err) => panic!("failed to clean up Docker resource: {err}"),
+    };
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "failed to clean up Docker resource: {stderr}"
+    );
+}
+
 fn docker_volume_create(name: &str) -> String {
     let out = match std::process::Command::new("docker")
         .args(["volume", "create", name])

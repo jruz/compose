@@ -18,30 +18,57 @@ pub enum ShutdownStrategy {
     MainProcess(String),
 }
 
+pub struct Signals {
+    sigint: signal::unix::Signal,
+    sigterm: signal::unix::Signal,
+}
+
+pub fn register_signals() -> Result<Signals, Error> {
+    let interrupt = signal::unix::SignalKind::interrupt();
+    let terminate = signal::unix::SignalKind::terminate();
+    let sigint = match signal::unix::signal(interrupt) {
+        Ok(signal) => signal,
+        Err(source) => return Err(Error::SignalHandler { source }),
+    };
+    let sigterm = match signal::unix::signal(terminate) {
+        Ok(signal) => signal,
+        Err(source) => return Err(Error::SignalHandler { source }),
+    };
+    Ok(Signals { sigint, sigterm })
+}
+
+pub async fn wait_for_signal(signals: &mut Signals) {
+    tokio::select! {
+        _result = signals.sigint.recv() => {}
+        _result = signals.sigterm.recv() => {}
+    }
+}
+
+pub fn handle_signal(
+    actors: &[message::ActorHandle],
+    display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
+) -> Result<message::ExitResult, Error> {
+    shutdown::emit_killing_all(actors, None, "signal received", display_tx)?;
+    shutdown::kill_all(actors);
+    Ok(message::ExitResult {
+        code: 130,
+        failed_name: None,
+    })
+}
+
 pub async fn manage(
     actors: &[message::ActorHandle],
     shutdown: ShutdownStrategy,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-    mut event_rx: mpsc::UnboundedReceiver<message::ActorExited>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorExited>,
+    signals: &mut Signals,
 ) -> Result<message::ExitResult, Error> {
-    let signal_kind = signal::unix::SignalKind::terminate();
-    let mut sigterm =
-        signal::unix::signal(signal_kind).map_err(|source| Error::SignalHandler { source })?;
-
     tokio::select! {
         Some(exited) = event_rx.recv() => {
             handle_exited(exited, &shutdown, actors, display_tx)
         }
-        Some(()) = sigterm.recv() => {
-            shutdown::emit_killing_all(actors, None, "signal received", display_tx)?;
-            shutdown::kill_all(actors);
-            Ok(message::ExitResult { code: 130, failed_name: None })
-        }
-        result = signal::ctrl_c() => {
-            result.map_err(|source| Error::SignalHandler { source })?;
-            shutdown::emit_killing_all(actors, None, "signal received", display_tx)?;
-            shutdown::kill_all(actors);
-            Ok(message::ExitResult { code: 130, failed_name: None })
+        () = wait_for_signal(signals) => {
+            handle_signal(actors, display_tx)
         }
     }
 }

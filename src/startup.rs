@@ -110,12 +110,12 @@ pub async fn start_all(
     channels: &Channels<'_>,
     event_rx: &mut mpsc::UnboundedReceiver<message::ActorExited>,
     network: Option<&str>,
-) -> Result<(StartupResult, Vec<message::ActorHandle>), Error> {
+    actors: &mut Vec<message::ActorHandle>,
+) -> Result<StartupResult, Error> {
     let shell = match &config.shell {
         Some(shell) => shell.as_str(),
         None => "sh",
     };
-    let mut actors: Vec<message::ActorHandle> = Vec::new();
     for name in start_order {
         let proc_def = config
             .processes
@@ -146,17 +146,15 @@ pub async fn start_all(
         let env = env::resolve(global_env, proc_def)?;
 
         let actor = spawn_process_actor(name, proc_def, shell, &env, network, channels)?;
+        actors.push(actor);
 
         if is_oneshot {
-            if let Some(result) = handle_oneshot(name, &actors, event_rx, &channels.display).await?
-            {
-                actors.push(actor);
-                return Ok((result, actors));
+            if let Some(result) = handle_oneshot(name, actors, event_rx, &channels.display).await? {
+                return Ok(result);
             }
-            drop(actor.join.await);
+            let completed_actor = take_actor(actors, name)?;
+            drop(completed_actor.join.await);
         } else {
-            actors.push(actor);
-
             let health_info = build_health_info(proc_def, &env, name, network, channels.binary);
 
             if health_info.is_some() {
@@ -166,19 +164,30 @@ pub async fn start_all(
                 )?;
             }
 
-            match start_service(name, health_info, &actors, event_rx, &channels.display).await? {
+            match start_service(name, health_info, actors, event_rx, &channels.display).await? {
                 ServiceOutcome::Ready => {}
                 ServiceOutcome::CrashedDuringStartup { code, failed_name } => {
-                    return Ok((
-                        StartupResult::CrashedDuringStartup { code, failed_name },
-                        actors,
-                    ));
+                    return Ok(StartupResult::CrashedDuringStartup { code, failed_name });
                 }
             }
         }
     }
 
-    Ok((StartupResult::Ready, actors))
+    Ok(StartupResult::Ready)
+}
+
+fn take_actor(
+    actors: &mut Vec<message::ActorHandle>,
+    name: &str,
+) -> Result<message::ActorHandle, Error> {
+    let position = actors
+        .iter()
+        .position(|actor| actor.name == name)
+        .ok_or_else(|| Error::ProcessNotFound {
+            name: name.to_string(),
+        })?;
+    let actor = actors.remove(position);
+    Ok(actor)
 }
 
 fn build_health_info(

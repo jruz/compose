@@ -37,6 +37,21 @@ pub enum Error {
     Startup(#[from] startup::Error),
 }
 
+struct RunContext<'cfg, 'run> {
+    channels: &'run startup::Channels<'cfg>,
+    config: &'cfg config::Config,
+    display_tx: &'run mpsc::UnboundedSender<message::DisplayMsg>,
+    global_env: &'run std::collections::BTreeMap<String, String>,
+    network: Option<&'run str>,
+    start_order: &'run [String],
+}
+
+struct RunState<'run> {
+    actors: &'run mut Vec<message::ActorHandle>,
+    event_rx: &'run mut mpsc::UnboundedReceiver<message::ActorExited>,
+    signals: &'run mut lifecycle::Signals,
+}
+
 pub async fn run(
     config: config::Config,
     mode: cli::Command,
@@ -57,22 +72,8 @@ pub async fn run(
     check_main_not_oneshot(&shutdown, &config)?;
     let env_path = global_env_file.as_deref();
     let global_env = env::load_global(env_path)?;
-
-    let network_name = if has_docker {
-        let project = &project_name;
-        let network = docker_infra::setup(
-            binary,
-            &config,
-            &start_order,
-            project,
-            &global_env,
-            &display_tx,
-        )
-        .await?;
-        Some(network)
-    } else {
-        None
-    };
+    let mut signals = lifecycle::register_signals()?;
+    let network_name = has_docker.then(|| docker_infra::generate_network_name(&project_name));
 
     let channels = startup::Channels {
         binary,
@@ -80,24 +81,21 @@ pub async fn run(
         events: event_tx.clone(),
     };
     let network_ref = network_name.as_deref();
-    let (startup_result, actors) = startup::start_all(
-        &config,
-        &start_order,
-        &global_env,
-        &channels,
-        &mut event_rx,
-        network_ref,
-    )
-    .await?;
-    let result = run_lifecycle(
-        startup_result,
-        event_tx,
-        shutdown,
-        &display_tx,
-        event_rx,
-        &actors,
-    )
-    .await;
+    let mut actors = Vec::new();
+    let context = RunContext {
+        channels: &channels,
+        config: &config,
+        display_tx: &display_tx,
+        global_env: &global_env,
+        network: network_ref,
+        start_order: &start_order,
+    };
+    let state = RunState {
+        actors: &mut actors,
+        event_rx: &mut event_rx,
+        signals: &mut signals,
+    };
+    let result = run_until_shutdown(context, state, event_tx, shutdown).await;
 
     await_actor_shutdown(actors, &display_tx).await;
     if let Some(net) = &network_name {
@@ -108,6 +106,59 @@ pub async fn run(
     let formatter_result = formatter_handle.await;
     drop(formatter_result);
     result
+}
+
+async fn run_until_shutdown(
+    context: RunContext<'_, '_>,
+    state: RunState<'_>,
+    event_tx: mpsc::UnboundedSender<message::ActorExited>,
+    shutdown: lifecycle::ShutdownStrategy,
+) -> Result<message::ExitResult, Error> {
+    if let Some(network) = context.network {
+        tokio::select! {
+            setup = docker_infra::setup(
+                context.channels.binary,
+                context.config,
+                context.start_order,
+                network,
+                context.global_env,
+                context.display_tx,
+            ) => {
+                setup?;
+            }
+            () = lifecycle::wait_for_signal(state.signals) => {
+                let result = lifecycle::handle_signal(state.actors, context.display_tx)?;
+                return Ok(result);
+            }
+        }
+    }
+
+    let startup_result = tokio::select! {
+        startup = startup::start_all(
+            context.config,
+            context.start_order,
+            context.global_env,
+            context.channels,
+            state.event_rx,
+            context.network,
+            state.actors,
+        ) => startup?,
+        () = lifecycle::wait_for_signal(state.signals) => {
+            let result = lifecycle::handle_signal(state.actors, context.display_tx)?;
+            return Ok(result);
+        }
+    };
+
+    run_lifecycle(
+        startup_result,
+        event_tx,
+        shutdown,
+        context.display_tx,
+        state.event_rx,
+        state.actors,
+        state.signals,
+    )
+    .await
 }
 
 fn display_names(config: &config::Config, has_docker: bool, runtime_label: &str) -> Vec<String> {
@@ -124,8 +175,9 @@ async fn run_lifecycle(
     event_tx: mpsc::UnboundedSender<message::ActorExited>,
     shutdown: lifecycle::ShutdownStrategy,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-    event_rx: mpsc::UnboundedReceiver<message::ActorExited>,
+    event_rx: &mut mpsc::UnboundedReceiver<message::ActorExited>,
     actors: &[message::ActorHandle],
+    signals: &mut lifecycle::Signals,
 ) -> Result<message::ExitResult, Error> {
     match startup_result {
         startup::StartupResult::CrashedDuringStartup { code, failed_name } => {
@@ -136,7 +188,7 @@ async fn run_lifecycle(
         }
         startup::StartupResult::Ready => {
             drop(event_tx);
-            lifecycle::manage(actors, shutdown, display_tx, event_rx)
+            lifecycle::manage(actors, shutdown, display_tx, event_rx, signals)
                 .await
                 .map_err(Error::from)
         }
