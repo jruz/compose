@@ -109,6 +109,7 @@ pub fn build_command(
     let piped_out = std::process::Stdio::piped();
     let piped_err = std::process::Stdio::piped();
     cmd.stdout(piped_out).stderr(piped_err);
+    cmd.kill_on_drop(true);
     cmd
 }
 

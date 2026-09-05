@@ -1,0 +1,13 @@
+processes:
+  startup-service:
+    command: "echo $$ > ${COMPOSE_TEST_MARKER}; trap 'exit 0' TERM; while true; do sleep 1; done"
+    env:
+      COMPOSE_TEST_MARKER: "${COMPOSE_TEST_MARKER}"
+    health:
+      command: "false"
+      interval_secs: 1
+      timeout_secs: 30
+
+  consumer:
+    command: "exit 0"
+    depends_on: [startup-service]

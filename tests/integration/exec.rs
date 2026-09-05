@@ -108,6 +108,35 @@ fn health_crash_during_check() {
 }
 
 #[test]
+fn interrupt_during_health_check_cleans_up_process() {
+    let output = interrupt_fixture_after_process_starts("interrupt_health_check.yaml", "up");
+    let service_pid = output
+        .stdout
+        .lines()
+        .find(|line| line.starts_with("service-pid="))
+        .and_then(|line| line.split_once("service-pid=").map(|(_, pid)| pid.trim()));
+    let Some(service_pid) = service_pid else {
+        panic!("service PID missing from stdout: {}", output.stdout);
+    };
+    let service_pid = match service_pid.parse::<i32>() {
+        Ok(pid) => pid,
+        Err(err) => panic!("invalid service PID {service_pid:?}: {err}"),
+    };
+    let process = nix::unistd::Pid::from_raw(service_pid);
+    let process_path = std::path::PathBuf::from(format!("/proc/{service_pid}"));
+    let process_alive = process_path.exists();
+    if process_alive
+        && let Err(err) = nix::sys::signal::killpg(process, nix::sys::signal::Signal::SIGKILL)
+    {
+        panic!("failed to clean up leaked process: {err}");
+    }
+
+    let expected_code: i32 = 130;
+    assert_eq!(output.status.code(), Some(expected_code));
+    assert!(!process_alive, "startup service survived compose shutdown");
+}
+
+#[test]
 fn graceful_shutdown() {
     let output = run_fixture("graceful_shutdown.yaml", "run");
     assert_exit_code(&output, 0);

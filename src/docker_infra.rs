@@ -23,28 +23,19 @@ pub async fn setup(
     binary: &str,
     config: &config::Config,
     start_order: &[String],
-    project_name: &str,
+    network: &str,
     global_env: &BTreeMap<String, String>,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-) -> Result<String, Error> {
-    let network = generate_network_name(project_name);
+) -> Result<(), Error> {
     let msg = message::DisplayMsg::Docker(message::DockerMsg::CreatingNetwork {
         name: binary.to_string(),
     });
     send_display(display_tx, msg)?;
-    remove_containers(binary, config, start_order, &network, display_tx).await;
-    docker::network_rm(binary, &network).await?;
-    docker::network_create(binary, &network).await?;
-    build_actor::build(
-        binary,
-        config,
-        start_order,
-        &network,
-        global_env,
-        display_tx,
-    )
-    .await?;
-    Ok(network)
+    remove_containers(binary, config, start_order, network, display_tx).await;
+    docker::network_rm(binary, network).await?;
+    docker::network_create(binary, network).await?;
+    build_actor::build(binary, config, start_order, network, global_env, display_tx).await?;
+    Ok(())
 }
 
 pub async fn cleanup(
@@ -108,7 +99,7 @@ async fn remove_containers(
     }
 }
 
-fn generate_network_name(project_name: &str) -> String {
+pub fn generate_network_name(project_name: &str) -> String {
     let pid = std::process::id();
     format!("{project_name}-{pid}")
 }
