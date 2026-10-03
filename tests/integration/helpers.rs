@@ -1,6 +1,21 @@
 use std::path::PathBuf;
 use std::process::Output;
 
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(
+        "expected successful HTTP response {expected:?}, got {status}\nstdout: {stdout}\nstderr: {stderr}"
+    )]
+    HttpResponse {
+        expected: String,
+        status: std::process::ExitStatus,
+        stdout: String,
+        stderr: String,
+    },
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
+
 pub struct InterruptedOutput {
     pub pid: i32,
     pub status: std::process::ExitStatus,
@@ -73,6 +88,40 @@ pub fn run_docker_fixture(fixture_dir: &str, subcommand: &str) -> Output {
         Ok(output) => output,
         Err(err) => panic!("failed to execute binary: {err}"),
     }
+}
+
+pub fn run_docker_http_fixture(
+    fixture_dir: &str,
+    port: u16,
+    env_vars: &[(&str, &str)],
+) -> Result<Output, Error> {
+    let dir = fixture_path(fixture_dir);
+    let bin = binary_path();
+    let script = format!(
+        "curl --version >&2 || exit $?\n{bin} up --config compose.yaml >&2 &\nPID=$!\ntrap 'kill -INT \"$PID\"; wait \"$PID\"' EXIT\ncurl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 --retry-max-time 30 --max-time 2 http://localhost:{port}/",
+        bin = bin.display(),
+    );
+    let env = env_vars.iter().copied();
+    let output = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(script)
+        .current_dir(dir)
+        .envs(env)
+        .output()?;
+    Ok(output)
+}
+
+pub fn check_http_response(output: &Output, expected: &str) -> Result<(), Error> {
+    let stdout = stdout_of(output);
+    if !output.status.success() || stdout.trim() != expected {
+        return Err(Error::HttpResponse {
+            expected: expected.to_string(),
+            status: output.status,
+            stdout,
+            stderr: stderr_of(output),
+        });
+    }
+    Ok(())
 }
 
 pub fn interrupt_docker_fixture_after_container_starts(

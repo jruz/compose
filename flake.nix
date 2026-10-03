@@ -34,6 +34,7 @@
           pkgs.cargo-outdated
           pkgs.cargo-watch
           pkgs.coreutils
+          pkgs.curl
           pkgs.docker-client
           pkgs.findutils
           pkgs.gcc
