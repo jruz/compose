@@ -19,6 +19,7 @@ pub enum Error {
 pub struct InterruptedOutput {
     pub pid: i32,
     pub status: std::process::ExitStatus,
+    pub stderr: String,
     pub stdout: String,
 }
 
@@ -132,11 +133,15 @@ pub fn interrupt_docker_fixture_after_container_starts(
     let dir = fixture_path(fixture_dir);
     let config = dir.join("compose.yaml");
     let bin = binary_path();
-    let script = format!(
-        "COMPOSE_CAPTURE=$(mktemp)\n{bin} {subcommand} --config {config} >\"$COMPOSE_CAPTURE\" 2>&1 &\nCOMPOSE_PID=$!\necho compose-pid=$COMPOSE_PID\nCOMPOSE_CONTAINER={fixture_dir}-$COMPOSE_PID-{process_name}\nuntil docker container inspect \"$COMPOSE_CONTAINER\" >/dev/null 2>&1; do sleep 0.01; done\nkill -INT $COMPOSE_PID\nwait $COMPOSE_PID\nCOMPOSE_STATUS=$?\ncat \"$COMPOSE_CAPTURE\"\nrm \"$COMPOSE_CAPTURE\"\nexit $COMPOSE_STATUS",
+    let command = format!(
+        "exec {bin} {subcommand} --config {config}",
         bin = bin.display(),
         config = config.display(),
     );
+    let readiness = format!(
+        "docker container inspect \"{fixture_dir}-$COMPOSE_PID-{process_name}\" >/dev/null 2>&1"
+    );
+    let script = build_interrupt_script(&command, &readiness, ":", 60);
     let dir_path = dir.as_path();
     let current_dir = Some(dir_path);
     run_interrupt_script(&script, current_dir)
@@ -148,17 +153,35 @@ pub fn interrupt_fixture_after_process_starts(
 ) -> InterruptedOutput {
     let config = fixture_path(fixture);
     let bin = binary_path();
-    let script = format!(
-        "COMPOSE_CAPTURE=$(mktemp)\nCOMPOSE_MARKER=$(mktemp)\nrm \"$COMPOSE_MARKER\"\nCOMPOSE_TEST_MARKER=\"$COMPOSE_MARKER\" {bin} {subcommand} --config {config} >\"$COMPOSE_CAPTURE\" 2>&1 &\nCOMPOSE_PID=$!\necho compose-pid=$COMPOSE_PID\nuntil test -s \"$COMPOSE_MARKER\"; do sleep 0.01; done\nCOMPOSE_SERVICE_PID=$(cat \"$COMPOSE_MARKER\")\necho service-pid=$COMPOSE_SERVICE_PID\nkill -INT $COMPOSE_PID\nwait $COMPOSE_PID\nCOMPOSE_STATUS=$?\ncat \"$COMPOSE_CAPTURE\"\nrm \"$COMPOSE_CAPTURE\"\nrm \"$COMPOSE_MARKER\"\nexit $COMPOSE_STATUS",
+    let command = format!(
+        "COMPOSE_TEST_MARKER=\"$COMPOSE_MARKER\" exec {bin} {subcommand} --config {config}",
         bin = bin.display(),
         config = config.display(),
     );
+    let readiness = "test -s \"$COMPOSE_MARKER\"";
+    let after_ready =
+        "COMPOSE_SERVICE_PID=$(cat \"$COMPOSE_MARKER\")\necho service-pid=$COMPOSE_SERVICE_PID";
+    let script = build_interrupt_script(&command, readiness, after_ready, 60);
     run_interrupt_script(&script, None)
 }
 
+pub fn build_interrupt_script(
+    command: &str,
+    readiness: &str,
+    after_ready: &str,
+    timeout_secs: u32,
+) -> String {
+    let support = include_str!("../support/interrupt.sh");
+    format!(
+        "{support}\nCOMPOSE_STARTUP_TIMEOUT={timeout_secs}\nCOMPOSE_MARKER=\"$COMPOSE_TEST_DIR/ready\"\n{command} >\"$COMPOSE_CAPTURE\" 2>&1 &\nCOMPOSE_PID=$!\necho compose-pid=$COMPOSE_PID\ntrap cleanup_interrupt EXIT\ntrap 'exit 124' TERM\nwait_for_startup '{readiness}' || exit $?\n{after_ready}\nkill -INT \"$COMPOSE_PID\"\nwait \"$COMPOSE_PID\"\nexit $?"
+    )
+}
+
 fn run_interrupt_script(script: &str, current_dir: Option<&std::path::Path>) -> InterruptedOutput {
-    let mut command = std::process::Command::new("sh");
-    command.arg("-c").arg(script);
+    let mut command = std::process::Command::new("timeout");
+    command
+        .args(["--signal=TERM", "--kill-after=15s", "90s", "sh", "-c"])
+        .arg(script);
     if let Some(dir) = current_dir {
         command.current_dir(dir);
     }
@@ -166,14 +189,14 @@ fn run_interrupt_script(script: &str, current_dir: Option<&std::path::Path>) -> 
         Ok(output) => output,
         Err(err) => panic!("failed to execute binary: {err}"),
     };
-    let stdout_bytes = output.stdout.as_slice();
-    let stdout = String::from_utf8_lossy(stdout_bytes).to_string();
+    let stdout = stdout_of(&output);
+    let stderr = stderr_of(&output);
     let pid = stdout
         .lines()
         .find(|line| line.starts_with("compose-pid="))
         .and_then(|line| line.split_once('=').map(|(_, pid)| pid));
     let Some(pid) = pid else {
-        panic!("compose PID missing from stdout: {stdout}");
+        panic!("compose PID missing from stdout: {stdout}\nstderr: {stderr}");
     };
     let pid = match pid.parse::<i32>() {
         Ok(pid) => pid,
@@ -182,6 +205,7 @@ fn run_interrupt_script(script: &str, current_dir: Option<&std::path::Path>) -> 
     InterruptedOutput {
         pid,
         status: output.status,
+        stderr,
         stdout,
     }
 }

@@ -116,7 +116,10 @@ fn interrupt_during_health_check_cleans_up_process() {
         .find(|line| line.starts_with("service-pid="))
         .and_then(|line| line.split_once("service-pid=").map(|(_, pid)| pid.trim()));
     let Some(service_pid) = service_pid else {
-        panic!("service PID missing from stdout: {}", output.stdout);
+        panic!(
+            "service PID missing from stdout: {}\nstderr: {}",
+            output.stdout, output.stderr
+        );
     };
     let service_pid = match service_pid.parse::<i32>() {
         Ok(pid) => pid,
@@ -132,7 +135,13 @@ fn interrupt_during_health_check_cleans_up_process() {
     }
 
     let expected_code: i32 = 130;
-    assert_eq!(output.status.code(), Some(expected_code));
+    assert_eq!(
+        output.status.code(),
+        Some(expected_code),
+        "stdout: {}\nstderr: {}",
+        output.stdout,
+        output.stderr
+    );
     assert!(!process_alive, "startup service survived compose shutdown");
 }
 
