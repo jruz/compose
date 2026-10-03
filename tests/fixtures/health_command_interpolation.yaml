@@ -1,8 +1,8 @@
 processes:
   service:
-    command: "touch /tmp/compose-test-health-cmd && exec sleep 10"
+    command: 'touch "${MARKER}" && exec sleep 10'
     env:
-      MARKER: /tmp/compose-test-health-cmd
+      MARKER: "${COMPOSE_TEST_MARKER}"
     health:
       command: 'test -f "${MARKER}"'
       interval_secs: 1

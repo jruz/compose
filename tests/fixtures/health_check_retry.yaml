@@ -1,8 +1,10 @@
 processes:
   service:
-    command: "(sleep 2 && touch /tmp/compose_health_retry_flag_99887) & echo service-started && exec sleep 10"
+    command: '(sleep 2 && touch "${MARKER}") & echo service-started && exec sleep 10'
+    env:
+      MARKER: "${COMPOSE_TEST_MARKER}"
     health:
-      command: "test -f /tmp/compose_health_retry_flag_99887 && rm -f /tmp/compose_health_retry_flag_99887"
+      command: 'test -f "${MARKER}" && rm "${MARKER}"'
       interval_secs: 1
       timeout_secs: 5
 
