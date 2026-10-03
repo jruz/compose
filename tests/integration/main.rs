@@ -18,3 +18,6 @@ mod validation;
 
 #[cfg(test)]
 mod docker;
+
+#[cfg(test)]
+mod interrupt_helpers;

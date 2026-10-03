@@ -162,7 +162,13 @@ fn interrupt_during_docker_health_check_cleans_up_resources() {
     }
 
     let expected_code: i32 = 130;
-    assert_eq!(output.status.code(), Some(expected_code));
+    assert_eq!(
+        output.status.code(),
+        Some(expected_code),
+        "stdout: {}\nstderr: {}",
+        output.stdout,
+        output.stderr
+    );
     assert!(!container_exists, "container survived compose shutdown");
     assert!(!network_exists, "network survived compose shutdown");
 }
