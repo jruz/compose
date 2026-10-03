@@ -116,20 +116,9 @@ fn run_background_with_sigint(
 }
 
 #[test]
-fn docker_ports() {
-    let dir = fixture_path("docker_ports");
-    let bin = binary_path();
-    let script = format!(
-        "{bin} up --config compose.yaml &\nPID=$!\nsleep 5\ncurl -s http://localhost:18793/\nkill -INT $PID\nwait $PID\nexit 0",
-        bin = bin.display(),
-    );
-    let output = run_shell_script_in_dir(&script, &dir);
-
-    let stdout = stdout_of(&output);
-    assert!(
-        stdout.contains("port-works"),
-        "expected port-works in stdout\nstdout: {stdout}"
-    );
+fn docker_ports() -> Result<(), super::helpers::Error> {
+    let output = run_docker_http_fixture("docker_ports", 18793, &[])?;
+    check_http_response(&output, "port-works")
 }
 
 #[test]
@@ -451,26 +440,13 @@ fn docker_stop_timeout() {
 }
 
 #[test]
-fn docker_ports_interpolation() {
-    let dir = fixture_path("docker_ports_interpolation");
-    let bin = binary_path();
-    let script = format!(
-        "{bin} up --config compose.yaml &\nPID=$!\nsleep 5\ncurl -s http://localhost:18794/\nkill -INT $PID\nwait $PID\nexit 0",
-        bin = bin.display(),
-    );
-    let output = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(&script)
-        .current_dir(&dir)
-        .env("HOST_PORT", "18794")
-        .output()
-        .expect("failed to run shell script");
-
-    let stdout = stdout_of(&output);
-    assert!(
-        stdout.contains("port-interpolation-works"),
-        "expected port-interpolation-works in stdout\nstdout: {stdout}"
-    );
+fn docker_ports_interpolation() -> Result<(), super::helpers::Error> {
+    let output = run_docker_http_fixture(
+        "docker_ports_interpolation",
+        18794,
+        &[("HOST_PORT", "18794")],
+    )?;
+    check_http_response(&output, "port-interpolation-works")
 }
 
 #[test]
