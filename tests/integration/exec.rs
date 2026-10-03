@@ -146,7 +146,7 @@ fn graceful_shutdown() {
 
 #[test]
 fn health_check_retry_then_healthy() {
-    let output = run_fixture("health_check_retry.yaml", "run");
+    let output = run_fixture_with_temporary_marker("health_check_retry.yaml", "run");
     assert_exit_code(&output, 0);
     assert_stdout_contains(&output, "service-started");
     assert_stdout_contains(&output, "healthy");

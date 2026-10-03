@@ -175,7 +175,7 @@ fn env_precedence_chain() {
 
 #[test]
 fn health_command_interpolation() {
-    let output = run_fixture("health_command_interpolation.yaml", "run");
+    let output = run_fixture_with_temporary_marker("health_command_interpolation.yaml", "run");
     assert_exit_code(&output, 0);
     assert_stdout_contains(&output, "healthy");
     assert_stdout_contains(&output, "consumer-started");

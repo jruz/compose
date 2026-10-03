@@ -32,6 +32,17 @@ pub fn run_fixture(fixture: &str, subcommand: &str) -> Output {
     }
 }
 
+pub fn run_fixture_with_temporary_marker(fixture: &str, subcommand: &str) -> Output {
+    let bin = binary_path();
+    let config = fixture_path(fixture);
+    let script = format!(
+        "set -eu\nCOMPOSE_TEST_DIR=$(mktemp -d)\ntrap 'rm -r \"$COMPOSE_TEST_DIR\"' EXIT\nCOMPOSE_TEST_MARKER=\"$COMPOSE_TEST_DIR/ready\" {bin} {subcommand} --config {config}",
+        bin = bin.display(),
+        config = config.display(),
+    );
+    run_shell_script(&script)
+}
+
 pub fn run_with_env_file(fixture: &str, subcommand: &str, env_file: &str) -> Output {
     let bin = binary_path();
     let config = fixture_path(fixture);
