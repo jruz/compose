@@ -1,5 +1,41 @@
 use super::helpers::*;
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("command failed with {status}\nstdout: {stdout}\nstderr: {stderr}")]
+    Command {
+        status: std::process::ExitStatus,
+        stdout: String,
+        stderr: String,
+    },
+    #[error("injected operation failure for volume {volume}")]
+    InjectedFailure { volume: String },
+    #[error("temporary volume directory has no valid name")]
+    InvalidVolumeName,
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("volume operation failed: {operation}\nvolume cleanup failed: {cleanup}")]
+    OperationAndCleanup {
+        operation: Box<Self>,
+        cleanup: Box<Self>,
+    },
+    #[error(
+        "expected successful volume output containing {expected:?}, got {status}\nstdout: {stdout}\nstderr: {stderr}"
+    )]
+    UnexpectedVolumeOutput {
+        expected: String,
+        status: std::process::ExitStatus,
+        stdout: String,
+        stderr: String,
+    },
+    #[error(transparent)]
+    Utf8(#[from] std::string::FromUtf8Error),
+    #[error("volume survived cleanup: {0}")]
+    VolumeStillExists(String),
+    #[error("separate operations reused volume {0}")]
+    VolumesNotUnique(String),
+}
+
 #[test]
 fn docker_build() {
     let output = run_docker_fixture("docker_build", "run");
@@ -210,157 +246,246 @@ fn docker_resource_cleanup(args: &[&str]) {
     );
 }
 
-fn docker_volume_create(name: &str) -> String {
-    let out = match std::process::Command::new("docker")
-        .args(["volume", "create", name])
-        .output()
-    {
-        Ok(out) => out,
-        Err(err) => panic!("failed to create docker volume: {err}"),
-    };
-    assert!(out.status.success(), "docker volume create failed");
-    name.to_string()
+fn check_volume_command(output: &std::process::Output) -> Result<(), Error> {
+    if !output.status.success() {
+        return Err(Error::Command {
+            status: output.status,
+            stdout: stdout_of(output),
+            stderr: stderr_of(output),
+        });
+    }
+    Ok(())
 }
 
-fn docker_volume_populate(vol: &str, file: &str, content: &str) {
+fn unique_docker_volume_name(prefix: &str) -> Result<String, Error> {
+    let template = format!("{prefix}-XXXXXXXXXXXX");
+    let output = std::process::Command::new("mktemp")
+        .args(["--directory", "--tmpdir", &template])
+        .output()?;
+    check_volume_command(&output)?;
+    let directory_output = String::from_utf8(output.stdout)?;
+    let directory_path = directory_output.trim();
+    let directory = std::path::Path::new(directory_path);
+    let name = directory
+        .file_name()
+        .and_then(std::ffi::OsStr::to_str)
+        .ok_or(Error::InvalidVolumeName)?
+        .to_string();
+    std::fs::remove_dir(directory)?;
+    Ok(name)
+}
+
+fn docker_volume_create(prefix: &str) -> Result<String, Error> {
+    let name = unique_docker_volume_name(prefix)?;
+    let output = std::process::Command::new("docker")
+        .args(["volume", "create", &name])
+        .output()?;
+    check_volume_command(&output)?;
+    Ok(name)
+}
+
+fn docker_volume_populate(vol: &str, file: &str, content: &str) -> Result<(), Error> {
     let script = format!("echo -n '{content}' > /mnt/{file}");
-    let out = match std::process::Command::new("docker")
+    let mount = format!("{vol}:/mnt");
+    let output = std::process::Command::new("docker")
         .args([
             "run",
             "--rm",
             "-v",
-            &format!("{vol}:/mnt"),
+            &mount,
             "alpine:3.21",
             "sh",
             "-c",
             &script,
         ])
-        .output()
-    {
-        Ok(out) => out,
-        Err(err) => panic!("failed to populate docker volume: {err}"),
-    };
-    assert!(out.status.success(), "docker volume populate failed");
+        .output()?;
+    check_volume_command(&output)
 }
 
-fn docker_volume_rm(vol: &str) {
-    let out = match std::process::Command::new("docker")
+fn docker_volume_rm(vol: &str) -> Result<(), Error> {
+    let output = std::process::Command::new("docker")
         .args(["volume", "rm", "--force", vol])
-        .output()
-    {
-        Ok(out) => out,
-        Err(err) => panic!("failed to remove docker volume: {err}"),
-    };
-    assert!(out.status.success(), "docker volume rm failed");
+        .output()?;
+    check_volume_command(&output)
+}
+
+fn with_docker_volume<T>(
+    prefix: &str,
+    operation: impl FnOnce(&str) -> Result<T, Error>,
+) -> Result<T, Error> {
+    let volume = docker_volume_create(prefix)?;
+    let result = operation(&volume);
+    let cleanup = docker_volume_rm(&volume);
+    finish_volume_operation(result, cleanup)
+}
+
+fn finish_volume_operation<T>(
+    result: Result<T, Error>,
+    cleanup: Result<(), Error>,
+) -> Result<T, Error> {
+    match (result, cleanup) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+        (Err(operation), Err(cleanup)) => Err(Error::OperationAndCleanup {
+            operation: Box::new(operation),
+            cleanup: Box::new(cleanup),
+        }),
+    }
+}
+
+fn check_docker_volume_output(output: &std::process::Output, expected: &str) -> Result<(), Error> {
+    let stdout = stdout_of(output);
+    if !output.status.success() || !stdout.contains(expected) {
+        return Err(Error::UnexpectedVolumeOutput {
+            expected: expected.to_string(),
+            status: output.status,
+            stdout,
+            stderr: stderr_of(output),
+        });
+    }
+    Ok(())
 }
 
 #[test]
-fn docker_volumes() {
-    let vol = docker_volume_create("compose-test-vol-main");
-    docker_volume_populate(&vol, "file.txt", "volume-content-here\n");
-
-    let dir = fixture_path("docker_volumes");
-    let compose_content = format!(
-        "processes:\n  vol-main:\n    docker:\n      image: compose-test-vol-main\n      build: ./app\n      volumes:\n        - \"{vol}:/mnt/data\"\n"
-    );
-    let compose_path = dir.join("compose.yaml");
-    match std::fs::write(compose_path, compose_content) {
-        Ok(()) => {}
-        Err(err) => panic!("failed to write compose.yaml: {err}"),
-    }
-
-    let bin = binary_path();
-    let output = match std::process::Command::new(bin)
-        .arg("run")
-        .arg("--config")
-        .arg("compose.yaml")
-        .current_dir(&dir)
-        .output()
-    {
-        Ok(output) => output,
-        Err(err) => panic!("failed to execute binary: {err}"),
-    };
-
-    docker_volume_rm(&vol);
-
-    assert_exit_code(&output, 0);
-    assert_stdout_contains(&output, "volume-content-here");
-}
-
-#[test]
-fn docker_volume_expansion_from_host_env() {
-    let vol = docker_volume_create("compose-test-vol-host");
-    docker_volume_populate(&vol, "file.txt", "expanded-host-var\n");
-
-    let dir = fixture_path("docker_volume_expansion");
-    let compose_content = "processes:\n  vol-host:\n    docker:\n      image: compose-test-vol-host\n      build: ./app\n      volumes:\n        - \"${VOLUME_HOST_DIR}:/mnt/data\"\n";
-    let compose_path = dir.join("compose_host.yaml");
-    match std::fs::write(compose_path, compose_content) {
-        Ok(()) => {}
-        Err(err) => panic!("failed to write compose yaml: {err}"),
-    }
-
-    let output = {
+fn docker_volumes() -> Result<(), Error> {
+    let output = with_docker_volume("compose-test-vol-main", |vol| {
+        docker_volume_populate(vol, "file.txt", "volume-content-here\n")?;
+        let dir = fixture_path("docker_volumes");
+        let compose_content = format!(
+            "processes:\n  vol-main:\n    docker:\n      image: compose-test-vol-main\n      build: ./app\n      volumes:\n        - \"{vol}:/mnt/data\"\n"
+        );
+        let compose_path = dir.join("compose.yaml");
+        std::fs::write(compose_path, compose_content)?;
         let bin = binary_path();
-        let mut cmd = std::process::Command::new(bin);
-        cmd.arg("run")
+        let output = std::process::Command::new(bin)
+            .arg("run")
+            .arg("--config")
+            .arg("compose.yaml")
+            .current_dir(&dir)
+            .output()?;
+        Ok(output)
+    })?;
+    check_docker_volume_output(&output, "volume-content-here")
+}
+
+#[test]
+fn docker_volume_expansion_from_host_env() -> Result<(), Error> {
+    let output = with_docker_volume("compose-test-vol-host", |vol| {
+        docker_volume_populate(vol, "file.txt", "expanded-host-var\n")?;
+        let dir = fixture_path("docker_volume_expansion");
+        let compose_content = "processes:\n  vol-host:\n    docker:\n      image: compose-test-vol-host\n      build: ./app\n      volumes:\n        - \"${VOLUME_HOST_DIR}:/mnt/data\"\n";
+        let compose_path = dir.join("compose_host.yaml");
+        std::fs::write(&compose_path, compose_content)?;
+        let bin = binary_path();
+        let output = std::process::Command::new(bin)
+            .arg("run")
             .arg("--config")
             .arg("compose_host.yaml")
-            .env("VOLUME_HOST_DIR", &vol)
-            .current_dir(&dir);
-        match cmd.output() {
-            Ok(output) => output,
-            Err(err) => panic!("failed to execute binary: {err}"),
-        }
-    };
-
-    let host_cleanup = dir.join("compose_host.yaml");
-    match std::fs::remove_file(host_cleanup) {
-        Ok(()) => {}
-        Err(err) => panic!("failed to clean up compose yaml: {err}"),
-    }
-    docker_volume_rm(&vol);
-
-    assert_exit_code(&output, 0);
-    assert_stdout_contains(&output, "expanded-host-var");
+            .env("VOLUME_HOST_DIR", vol)
+            .current_dir(&dir)
+            .output()?;
+        std::fs::remove_file(compose_path)?;
+        Ok(output)
+    })?;
+    check_docker_volume_output(&output, "expanded-host-var")
 }
 
 #[test]
-fn docker_volume_expansion_from_process_env() {
-    let vol = docker_volume_create("compose-test-vol-proc");
-    docker_volume_populate(&vol, "file.txt", "expanded-process-var\n");
+fn docker_volume_expansion_from_process_env() -> Result<(), Error> {
+    let output = with_docker_volume("compose-test-vol-proc", |vol| {
+        docker_volume_populate(vol, "file.txt", "expanded-process-var\n")?;
+        let dir = fixture_path("docker_volume_expansion");
+        let compose_content = format!(
+            "processes:\n  vol-proc:\n    docker:\n      image: compose-test-vol-proc\n      build: ./app\n      volumes:\n        - \"${{DATA_PATH}}:/mnt/data\"\n    env:\n      DATA_PATH: \"{vol}\"\n"
+        );
+        let compose_path = dir.join("compose_proc.yaml");
+        std::fs::write(&compose_path, compose_content)?;
+        let bin = binary_path();
+        let output = std::process::Command::new(bin)
+            .arg("run")
+            .arg("--config")
+            .arg("compose_proc.yaml")
+            .current_dir(&dir)
+            .output()?;
+        std::fs::remove_file(compose_path)?;
+        Ok(output)
+    })?;
+    check_docker_volume_output(&output, "expanded-process-var")
+}
 
-    let dir = fixture_path("docker_volume_expansion");
-    let compose_content = format!(
-        "processes:\n  vol-proc:\n    docker:\n      image: compose-test-vol-proc\n      build: ./app\n      volumes:\n        - \"${{DATA_PATH}}:/mnt/data\"\n    env:\n      DATA_PATH: \"{vol}\"\n"
-    );
-    let compose_path = dir.join("compose_proc.yaml");
-    match std::fs::write(compose_path, compose_content) {
-        Ok(()) => {}
-        Err(err) => panic!("failed to write compose yaml: {err}"),
+#[test]
+fn docker_volume_cleanup_after_operation_failure() {
+    let result = with_docker_volume::<()>("compose-test-vol-failure", |volume| {
+        Err(Error::InjectedFailure {
+            volume: volume.to_string(),
+        })
+    })
+    .inspect_err(|error| {
+        let cleanup_verified = if let Error::InjectedFailure { volume } = error {
+            let names = docker_resource_names(&["volume", "ls", "--format", "{{.Name}}"]);
+            !names.lines().any(|name| name == volume)
+        } else {
+            false
+        };
+        assert!(
+            cleanup_verified,
+            "expected operation failure and volume cleanup: {error}"
+        );
+    });
+    assert!(result.is_err(), "expected operation failure: {result:?}");
+}
+
+#[test]
+fn docker_volume_operations_use_distinct_names() -> Result<(), Error> {
+    let (first, second) = with_docker_volume("compose-test-vol-unique", |first| {
+        with_docker_volume("compose-test-vol-unique", |second| {
+            let first_name = first.to_string();
+            let second_name = second.to_string();
+            Ok((first_name, second_name))
+        })
+    })?;
+    if first == second {
+        let error = Error::VolumesNotUnique(first);
+        return Err(error);
     }
+    check_docker_volume_removed(&first)?;
+    check_docker_volume_removed(&second)
+}
 
-    let bin = binary_path();
-    let output = match std::process::Command::new(bin)
-        .arg("run")
-        .arg("--config")
-        .arg("compose_proc.yaml")
-        .current_dir(&dir)
-        .output()
-    {
-        Ok(output) => output,
-        Err(err) => panic!("failed to execute binary: {err}"),
+#[test]
+fn docker_volume_cleanup_preserves_both_failures() {
+    let injected_operation = Error::InjectedFailure {
+        volume: "operation".to_string(),
     };
+    let injected_cleanup = Error::InjectedFailure {
+        volume: "cleanup".to_string(),
+    };
+    let operation_result: Result<(), Error> = Err(injected_operation);
+    let cleanup_result = Err(injected_cleanup);
+    let result = finish_volume_operation(operation_result, cleanup_result).inspect_err(|error| {
+        let both_preserved = if let Error::OperationAndCleanup { operation, cleanup } = error {
+            matches!(operation.as_ref(), Error::InjectedFailure { volume } if volume == "operation")
+                && matches!(cleanup.as_ref(), Error::InjectedFailure { volume } if volume == "cleanup")
+        } else {
+            false
+        };
+        assert!(both_preserved, "expected both failures: {error}");
+    });
+    assert!(result.is_err(), "expected both failures: {result:?}");
+}
 
-    let proc_cleanup = dir.join("compose_proc.yaml");
-    match std::fs::remove_file(proc_cleanup) {
-        Ok(()) => {}
-        Err(err) => panic!("failed to clean up compose yaml: {err}"),
+fn check_docker_volume_removed(volume: &str) -> Result<(), Error> {
+    let output = std::process::Command::new("docker")
+        .args(["volume", "ls", "--format", "{{.Name}}"])
+        .output()?;
+    check_volume_command(&output)?;
+    let names = stdout_of(&output);
+    if names.lines().any(|name| name == volume) {
+        let name = volume.to_string();
+        let error = Error::VolumeStillExists(name);
+        return Err(error);
     }
-    docker_volume_rm(&vol);
-
-    assert_exit_code(&output, 0);
-    assert_stdout_contains(&output, "expanded-process-var");
+    Ok(())
 }
 
 #[test]
