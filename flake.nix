@@ -48,7 +48,9 @@
         ];
         sandbox = pkgs.writeShellScriptBin "sandbox" ''
           SELF_DIR="$(dirname "$(readlink -f "$0")")"
-          SANDBOX_CMD="''${@:-$SHELL}"
+          if [ "$#" -eq 0 ]; then
+            set -- "''${SHELL:?SHELL must be set when sandbox runs without a command}"
+          fi
           exec ${pkgs.bubblewrap}/bin/bwrap \
             --unshare-all \
             --share-net \
@@ -74,7 +76,7 @@
             --setenv REVISION "''${REVISION:-dev}" \
             --dev /dev \
             --proc /proc \
-            $SANDBOX_CMD
+            -- "$@"
         '';
         defaultPackages = with pkgs; [
           deadnix

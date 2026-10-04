@@ -30,8 +30,15 @@ watch:
 
 # ─── sandbox ─────────────────────────────────────────────────────────────────
 
-sandbox-test:
-    sandbox bun scripts/sandbox-test.ts
+sandbox-check:
+    just sandbox-isolation-check
+    just sandbox-args-check
+
+sandbox-isolation-check:
+    sandbox bun scripts/sandbox-isolation-check.ts
+
+sandbox-args-check:
+    nu scripts/sandbox-args-check.nu
 
 # ─── nix ──────────────────────────────────────────────────────────────────────
 
