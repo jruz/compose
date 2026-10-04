@@ -8,7 +8,7 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 - `just check-ci` - full lint suite + tests inside sandbox
 - `just test` - run tests with cargo nextest
 - `just fix` - auto-fix fmt and clippy
-- `just sandbox-test` - verify sandbox filesystem isolation
+- `just sandbox-check` - verify sandbox filesystem isolation and argument forwarding
 
 ## Sandbox
 
