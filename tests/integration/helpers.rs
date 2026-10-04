@@ -130,6 +130,28 @@ pub fn interrupt_docker_fixture_after_container_starts(
     subcommand: &str,
     process_name: &str,
 ) -> InterruptedOutput {
+    let readiness = format!(
+        "docker container inspect \"{fixture_dir}-$COMPOSE_PID-{process_name}\" >/dev/null 2>&1"
+    );
+    interrupt_docker_fixture(fixture_dir, subcommand, &readiness)
+}
+
+pub fn interrupt_docker_fixture_after_healthy(
+    fixture_dir: &str,
+    subcommand: &str,
+    process_name: &str,
+) -> InterruptedOutput {
+    let readiness = format!(
+        "rg --fixed-strings --line-regexp --quiet \"[{process_name}] healthy\" \"$COMPOSE_CAPTURE\""
+    );
+    interrupt_docker_fixture(fixture_dir, subcommand, &readiness)
+}
+
+fn interrupt_docker_fixture(
+    fixture_dir: &str,
+    subcommand: &str,
+    readiness: &str,
+) -> InterruptedOutput {
     let dir = fixture_path(fixture_dir);
     let config = dir.join("compose.yaml");
     let bin = binary_path();
@@ -138,10 +160,7 @@ pub fn interrupt_docker_fixture_after_container_starts(
         bin = bin.display(),
         config = config.display(),
     );
-    let readiness = format!(
-        "docker container inspect \"{fixture_dir}-$COMPOSE_PID-{process_name}\" >/dev/null 2>&1"
-    );
-    let script = build_interrupt_script(&command, &readiness, ":", 60);
+    let script = build_interrupt_script(&command, readiness, ":", 60);
     let dir_path = dir.as_path();
     let current_dir = Some(dir_path);
     run_interrupt_script(&script, current_dir)
@@ -253,18 +272,6 @@ pub fn run_shell_script(script: &str) -> Output {
     match std::process::Command::new("sh")
         .arg("-c")
         .arg(script)
-        .output()
-    {
-        Ok(output) => output,
-        Err(err) => panic!("failed to run shell script: {err}"),
-    }
-}
-
-pub fn run_shell_script_in_dir(script: &str, dir: &std::path::Path) -> Output {
-    match std::process::Command::new("sh")
-        .arg("-c")
-        .arg(script)
-        .current_dir(dir)
         .output()
     {
         Ok(output) => output,

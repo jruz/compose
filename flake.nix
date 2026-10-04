@@ -43,6 +43,7 @@
           pkgs.just
           pkgs.nushell
           pkgs.podman
+          pkgs.ripgrep
           pkgs.woodpecker-cli
         ];
         sandbox = pkgs.writeShellScriptBin "sandbox" ''

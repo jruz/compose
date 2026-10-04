@@ -101,20 +101,6 @@ fn docker_health_check_shell() {
     assert_stdout_order(&output, &["healthy", "consumer ready"]);
 }
 
-fn run_background_with_sigint(
-    fixture_dir: &str,
-    subcommand: &str,
-    wait_secs: u32,
-) -> std::process::Output {
-    let dir = fixture_path(fixture_dir);
-    let bin = binary_path();
-    let script = format!(
-        "{bin} {subcommand} --config compose.yaml &\nPID=$!\nsleep {wait_secs}\nkill -INT $PID\nwait $PID\nexit 0",
-        bin = bin.display(),
-    );
-    run_shell_script_in_dir(&script, &dir)
-}
-
 #[test]
 fn docker_ports() -> Result<(), super::helpers::Error> {
     let output = run_docker_http_fixture("docker_ports", 18793, &[])?;
@@ -132,28 +118,54 @@ fn docker_services() {
 }
 
 #[test]
-fn docker_sigterm() {
-    let output = run_background_with_sigint("docker_sigterm", "up", 5);
-    let stdout = stdout_of(&output);
+fn interrupt_after_docker_becomes_healthy_cleans_up_resources() {
+    let fixture = "docker_sigterm";
+    let process_name = "sig-server";
+    let output = interrupt_docker_fixture_after_healthy(fixture, "up", process_name);
+    assert_docker_shutdown_cleans_up_resources(&output, fixture, process_name);
 
+    let healthy = output.stdout.find("[sig-server] healthy");
+    let killing = output.stdout.find("[sig-server] killing");
+    let healthy_before_shutdown = healthy
+        .zip(killing)
+        .is_some_and(|(ready, stopped)| ready < stopped);
     assert!(
-        stdout.contains("removing containers"),
-        "expected 'removing containers' in stdout\nstdout: {stdout}"
+        healthy_before_shutdown,
+        "expected health before shutdown\nstdout: {}\nstderr: {}",
+        output.stdout, output.stderr
     );
     assert!(
-        stdout.contains("removing network"),
-        "expected 'removing network' in stdout\nstdout: {stdout}"
+        output.stdout.contains("removing containers"),
+        "expected 'removing containers' in stdout\nstdout: {}",
+        output.stdout
+    );
+    assert!(
+        output.stdout.contains("removing network"),
+        "expected 'removing network' in stdout\nstdout: {}",
+        output.stdout
     );
 }
 
 #[test]
 fn interrupt_during_docker_health_check_cleans_up_resources() {
     let fixture = "docker_interrupt_health";
-    let output = interrupt_docker_fixture_after_container_starts(fixture, "up", "startup-service");
+    let process_name = "startup-service";
+    let output = interrupt_docker_fixture_after_container_starts(fixture, "up", process_name);
+    assert_docker_shutdown_cleans_up_resources(&output, fixture, process_name);
+}
+
+fn assert_docker_shutdown_cleans_up_resources(
+    output: &InterruptedOutput,
+    fixture: &str,
+    process_name: &str,
+) {
     let network = format!("{fixture}-{}", output.pid);
-    let container = format!("{network}-startup-service");
-    let container_exists = docker_resource_exists(&["container", "inspect", &container]);
-    let network_exists = docker_resource_exists(&["network", "inspect", &network]);
+    let container = format!("{network}-{process_name}");
+    let container_names =
+        docker_resource_names(&["container", "ls", "--all", "--format", "{{.Names}}"]);
+    let network_names = docker_resource_names(&["network", "ls", "--format", "{{.Name}}"]);
+    let container_exists = container_names.lines().any(|name| name == container);
+    let network_exists = network_names.lines().any(|name| name == network);
     if container_exists {
         docker_resource_cleanup(&["rm", "--force", &container]);
     }
@@ -173,13 +185,15 @@ fn interrupt_during_docker_health_check_cleans_up_resources() {
     assert!(!network_exists, "network survived compose shutdown");
 }
 
-fn docker_resource_exists(args: &[&str]) -> bool {
+fn docker_resource_names(args: &[&str]) -> String {
     let mut command = std::process::Command::new("docker");
     command.args(args);
-    match command.output() {
-        Ok(output) => output.status.success(),
+    let output = match command.output() {
+        Ok(output) => output,
         Err(err) => panic!("failed to inspect Docker resource: {err}"),
-    }
+    };
+    assert_exit_code(&output, 0);
+    stdout_of(&output)
 }
 
 fn docker_resource_cleanup(args: &[&str]) {
