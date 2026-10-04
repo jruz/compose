@@ -54,4 +54,4 @@ When adding or changing config fields or features, update all four places:
 - `src/cli.rs` - `long_about` schema in `--help`
 - `README.md` - config schema and usage examples
 - `CLAUDE.md` - config
-- `~/dev/.claude/skills/compose/SKILL.md` - global skill docs and examples
+- `~/dev/projects/agent-config/skills/compose/SKILL.md` - global skill docs and examples
