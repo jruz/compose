@@ -28,6 +28,9 @@
         rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         revision = self.rev or "dirty";
+        muslTarget = "${pkgs.stdenv.hostPlatform.uname.processor}-unknown-linux-musl";
+        muslArgs = pkgs.lib.optionalString pkgs.stdenv.isLinux "ARGS+=(--setenv CARGO_BUILD_TARGET ${muslTarget})";
+        rustPlatform = if pkgs.stdenv.isLinux then pkgs.pkgsStatic.rustPlatform else pkgs.rustPlatform;
         sandboxPath = pkgs.lib.makeBinPath [
           rust
           pkgs.bash
@@ -87,6 +90,7 @@
               ARGS+=(--bind /var/run/docker.sock /var/run/docker.sock)
             ''
             + ''
+              ${muslArgs}
               exec ${pkgs.bubblewrap}/bin/bwrap "''${ARGS[@]}" -- "$@"
             ''
           );
@@ -104,7 +108,7 @@
         ];
       in
       {
-        packages.default = pkgs.rustPlatform.buildRustPackage {
+        packages.default = rustPlatform.buildRustPackage {
           pname = cargoToml.package.name;
           inherit (cargoToml.package) version;
           src = ./.;
