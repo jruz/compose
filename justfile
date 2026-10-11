@@ -3,6 +3,9 @@ set dotenv-load
 # ─── general ──────────────────────────────────────────────────────────────────
 
 check:
+    nix develop --command just project-check
+
+project-check:
     just nix-check
     just woodpecker-check
     just rust-check
@@ -15,15 +18,26 @@ test:
     just rust-test
 
 install:
-    sandbox cargo build --release
-    cp target/release/compose ~/.cargo/bin/compose
+    sandbox cargo install \
+        --path . \
+        --locked \
+        --force \
+        --root target/dist
+    install \
+        --directory \
+        --mode=755 \
+        "$HOME/.cargo/bin"
+    install \
+        --mode=755 \
+        target/dist/bin/* \
+        "$HOME/.cargo/bin"
 
 fix:
     just nix-fix
     just rust-fix
 
 run *ARGS='':
-    cargo run {{ARGS}}
+    just rust-run {{ARGS}}
 
 watch:
     just rust-watch
@@ -83,9 +97,9 @@ rust-cargo-check:
 rust-check:
     just rust-cargo-check
     just rust-fmt-check
-    just rust-clippy
+    just rust-clippy-check
 
-rust-clippy *ARGS='':
+rust-clippy-check *ARGS='':
     sandbox cargo clippy --all-targets {{ARGS}}
 
 rust-clippy-fix *ARGS='':
@@ -116,6 +130,9 @@ rust-test *FILTER='':
 rust-upgrade:
     sandbox cargo upgrade --incompatible
     sandbox cargo update
+
+rust-run *ARGS='':
+    sandbox cargo run -- {{ARGS}}
 
 rust-watch:
     sandbox cargo watch --exec run
@@ -152,7 +169,7 @@ example-invalid-fields:
     ./target/release/compose run --config examples/compose.invalid-fields.yaml
 
 generate-screenshots:
-    cargo build --release
+    sandbox cargo build --release
     vhs examples/vhs/hero.tape
     vhs examples/vhs/run.tape
     vhs examples/vhs/up.tape
