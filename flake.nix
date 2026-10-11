@@ -49,38 +49,48 @@
           pkgs.ripgrep
           pkgs.woodpecker-cli
         ];
-        sandbox = pkgs.writeShellScriptBin "sandbox" ''
-          SELF_DIR="$(dirname "$(readlink -f "$0")")"
-          if [ "$#" -eq 0 ]; then
-            set -- "''${SHELL:?SHELL must be set when sandbox runs without a command}"
-          fi
-          exec ${pkgs.bubblewrap}/bin/bwrap \
-            --unshare-all \
-            --share-net \
-            --die-with-parent \
-            --ro-bind /nix /nix \
-            --ro-bind /etc/resolv.conf /etc/resolv.conf \
-            --ro-bind /etc/ssl /etc/ssl \
-            --ro-bind-try /etc/static /etc/static \
-            --ro-bind-try /etc/nix /etc/nix \
-            --ro-bind-try /run/current-system/sw /run/current-system/sw \
-            --symlink ${pkgs.coreutils}/bin/env /usr/bin/env \
-            --symlink ${pkgs.bash}/bin/bash /bin/sh \
-            --tmpfs "$HOME" \
-            --bind "$(pwd)" "$(pwd)" \
-            --bind /tmp /tmp \
-            --bind-try "$HOME/.bun" "$HOME/.bun" \
-            --bind-try "$HOME/.cargo" "$HOME/.cargo" \
-            --bind-try /var/run/docker.sock /var/run/docker.sock \
-            --ro-bind-try "$HOME/.gitconfig" "$HOME/.gitconfig" \
-            --ro-bind-try "$HOME/.ssh/known_hosts" "$HOME/.ssh/known_hosts" \
-            --setenv PATH "${sandboxPath}:$SELF_DIR" \
-            --setenv HOME "$HOME" \
-            --setenv REVISION "''${REVISION:-dev}" \
-            --dev /dev \
-            --proc /proc \
-            -- "$@"
-        '';
+        mkSandbox =
+          name: dockerEnabled:
+          pkgs.writeShellScriptBin name (
+            ''
+              SELF_DIR="$(dirname "$(readlink -f "$0")")"
+              ARGS=(
+                --unshare-all
+                --share-net
+                --die-with-parent
+                --ro-bind /nix /nix
+                --ro-bind /etc/resolv.conf /etc/resolv.conf
+                --ro-bind /etc/ssl /etc/ssl
+                --ro-bind-try /etc/static /etc/static
+                --ro-bind-try /etc/nix /etc/nix
+                --ro-bind-try /run/current-system/sw /run/current-system/sw
+                --symlink ${pkgs.coreutils}/bin/env /usr/bin/env
+                --symlink ${pkgs.bash}/bin/bash /bin/sh
+                --tmpfs "$HOME"
+                --tmpfs /tmp
+                --bind "$(pwd)" "$(pwd)"
+                --bind-try "$HOME/.bun/install/cache" "$HOME/.bun/install/cache"
+                --bind-try "$HOME/.cargo/registry" "$HOME/.cargo/registry"
+                --bind-try "$HOME/.cargo/git" "$HOME/.cargo/git"
+                --ro-bind-try "$HOME/.gitconfig" "$HOME/.gitconfig"
+                --ro-bind-try "$HOME/.ssh/known_hosts" "$HOME/.ssh/known_hosts"
+                --setenv PATH "${sandboxPath}:$SELF_DIR"
+                --setenv HOME "$HOME"
+                --setenv TMPDIR /tmp
+                --setenv REVISION "''${REVISION:-dev}"
+                --dev /dev
+                --proc /proc
+              )
+            ''
+            + pkgs.lib.optionalString dockerEnabled ''
+              ARGS+=(--bind /var/run/docker.sock /var/run/docker.sock)
+            ''
+            + ''
+              exec ${pkgs.bubblewrap}/bin/bwrap "''${ARGS[@]}" -- "$@"
+            ''
+          );
+        sandbox = mkSandbox "sandbox" false;
+        sandboxDocker = mkSandbox "sandbox-docker" true;
         defaultPackages = with pkgs; [
           deadnix
           fd
@@ -88,6 +98,7 @@
           nixfmt
           nushell
           sandbox
+          sandboxDocker
           statix
         ];
       in

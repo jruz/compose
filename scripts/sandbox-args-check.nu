@@ -1,8 +1,8 @@
 use log.nu
 
-def run-sandbox [args: list<string>, env_vars: record] {
+def run-sandbox [wrapper: string, args: list<string>, env_vars: record] {
     with-env $env_vars {
-        "" | run-external sandbox ...$args | complete
+        "" | run-external $wrapper ...$args | complete
     }
 }
 
@@ -28,7 +28,7 @@ def expect-failure [label: string, outcome: record, diagnostic: string] {
 }
 
 def with-executable [name: string, body: string, use: closure] {
-    let dir = mktemp --directory sandbox-args-check.XXXXXXXXXX | path expand
+    let dir = ^mktemp --directory --tmpdir=. sandbox-args-check.XXXXXXXXXX | path expand
     let path = $dir | path join $name
     $body | save $path
     ^chmod u+x $path
@@ -37,54 +37,46 @@ def with-executable [name: string, body: string, use: closure] {
     $result
 }
 
-def check-argument-boundaries [] {
+def check-argument-boundaries [wrapper: string] {
     let args = ["printf" "<%s>\n" "hello world" "" "*.nix" "*" "?" "[ab]" 'quote "with" spaces']
-    let outcome = run-sandbox $args {}
+    let outcome = run-sandbox $wrapper $args {}
     let expected = "<hello world>\n<>\n<*.nix>\n<*>\n<?>\n<[ab]>\n<quote \"with\" spaces>\n"
     expect-stdout "preserves argument boundaries" $outcome $expected
 }
 
-def check-executable-path-with-spaces [] {
+def check-executable-path-with-spaces [wrapper: string] {
     with-executable "command with spaces" "#!/bin/sh\nexec printf \"<%s>\\n\" \"$@\"\n" {|path|
-        let outcome = run-sandbox [$path "hello world" "" "*.nix"] {}
+        let outcome = run-sandbox $wrapper [$path "hello world" "" "*.nix"] {}
         expect-stdout "runs executable paths with spaces" $outcome "<hello world>\n<>\n<*.nix>\n"
     }
 }
 
-def check-selected-shell [] {
-    with-executable "shell with spaces" "#!/bin/sh\nprintf \"selected-shell\\n\"\n" {|path|
-        let outcome = run-sandbox [] {SHELL: $path}
-        expect-stdout "runs the selected shell without arguments" $outcome "selected-shell\n"
-    }
+def check-missing-command [wrapper: string] {
+    let outcome = run-sandbox $wrapper [] {}
+    expect-failure "rejects a missing command" $outcome "[OPTIONS...] [--] COMMAND [ARGS...]"
 }
 
-def check-empty-command [] {
-    let outcome = run-sandbox [""] {SHELL: "/bin/sh"}
+def check-empty-command [wrapper: string] {
+    let outcome = run-sandbox $wrapper [""] {}
     expect-failure "rejects an empty command" $outcome "execvp :"
 }
 
-def check-empty-shell [] {
-    let outcome = run-sandbox [] {SHELL: ""}
-    let diagnostic = "SHELL must be set when sandbox runs without a command"
-    expect-failure "rejects an empty shell" $outcome $diagnostic
-}
-
-def check-command-is-not-bubblewrap-option [] {
-    let outcome = run-sandbox ["--help"] {}
+def check-command-is-not-bubblewrap-option [wrapper: string] {
+    let outcome = run-sandbox $wrapper ["--help"] {}
     expect-failure "does not treat the command as a bubblewrap option" $outcome "execvp --help:"
 }
 
-def main [] {
+def main [wrapper: string] {
     let results = [
-        (check-argument-boundaries)
-        (check-executable-path-with-spaces)
-        (check-selected-shell)
-        (check-empty-command)
-        (check-empty-shell)
-        (check-command-is-not-bubblewrap-option)
+        (check-argument-boundaries $wrapper)
+        (check-executable-path-with-spaces $wrapper)
+        (check-missing-command $wrapper)
+        (check-empty-command $wrapper)
+        (check-command-is-not-bubblewrap-option $wrapper)
     ]
     for result in $results {
-        if $result.pass { log ok $result.msg } else { log err $result.msg }
+        let msg = $"($wrapper): ($result.msg)"
+        if $result.pass { log ok $msg } else { log err $msg }
     }
     if ($results | any {|result| not $result.pass }) {
         exit 1
