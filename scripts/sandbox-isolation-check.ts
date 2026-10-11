@@ -1,7 +1,7 @@
 import { accessSync, constants } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import { log } from "./log";
+import { log } from "./lib/log.ts";
 
 const home = homedir();
 
