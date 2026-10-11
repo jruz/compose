@@ -1,5 +1,7 @@
 set dotenv-load
 
+release_bin := "target/" + arch() + "-unknown-linux-musl/release/compose"
+
 # ─── general ──────────────────────────────────────────────────────────────────
 
 check:
@@ -150,27 +152,27 @@ woodpecker-check:
 
 example-run:
     sandbox cargo build --release
-    ./target/release/compose run --config examples/compose.run.yaml
+    ./{{ release_bin }} run --config examples/compose.run.yaml
 
 example-up:
     sandbox cargo build --release
-    ./target/release/compose up --config examples/compose.up.yaml
+    ./{{ release_bin }} up --config examples/compose.up.yaml
 
 example-fail:
     sandbox cargo build --release
-    ./target/release/compose run --config examples/compose.fail.yaml
+    ./{{ release_bin }} run --config examples/compose.fail.yaml
 
 example-docker-run:
     sandbox cargo build --release
-    ./target/release/compose run --config examples/compose.docker-run.yaml
+    ./{{ release_bin }} run --config examples/compose.docker-run.yaml
 
 example-docker-fail:
     sandbox cargo build --release
-    ./target/release/compose run --config examples/compose.docker-fail.yaml
+    ./{{ release_bin }} run --config examples/compose.docker-fail.yaml
 
 example-invalid-fields:
     sandbox cargo build --release
-    ./target/release/compose run --config examples/compose.invalid-fields.yaml
+    ./{{ release_bin }} run --config examples/compose.invalid-fields.yaml
 
 generate-screenshots:
     sandbox cargo build --release
