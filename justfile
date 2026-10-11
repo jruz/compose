@@ -30,15 +30,31 @@ watch:
 
 # ─── sandbox ─────────────────────────────────────────────────────────────────
 
-sandbox-check:
+[positional-arguments]
+sandbox-check *EXTRA_ALLOWED:
     just sandbox-isolation-check
+    just sandbox-allowlist-check "$@"
+    just sandbox-tmp-check
     just sandbox-args-check
+    just sandbox-docker-check
 
 sandbox-isolation-check:
     sandbox bun scripts/sandbox-isolation-check.ts
 
+[positional-arguments]
+sandbox-allowlist-check *EXTRA_ALLOWED:
+    sandbox nu scripts/sandbox-isolation-check.nu "$@"
+
+sandbox-tmp-check:
+    nu scripts/sandbox-tmp-check.nu
+
 sandbox-args-check:
-    nu scripts/sandbox-args-check.nu
+    nu scripts/sandbox-args-check.nu sandbox
+    nu scripts/sandbox-args-check.nu sandbox-docker
+
+sandbox-docker-check:
+    nu scripts/sandbox-docker-check.nu
+    sandbox-docker nu scripts/sandbox-isolation-check.nu /var/run/docker.sock
 
 # ─── nix ──────────────────────────────────────────────────────────────────────
 
@@ -93,7 +109,7 @@ rust-outdated:
     sandbox cargo outdated
 
 rust-test *FILTER='':
-    sandbox cargo nextest run \
+    sandbox-docker cargo nextest run \
         --no-tests=pass \
         {{FILTER}}
 
