@@ -33,6 +33,7 @@
           pkgs.bash
           pkgs.bun
           pkgs.cargo-edit
+          pkgs.cargo-machete
           pkgs.cargo-nextest
           pkgs.cargo-outdated
           pkgs.cargo-watch
