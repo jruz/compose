@@ -1,4 +1,4 @@
-import { log } from "./log";
+import { log } from "./lib/log.ts";
 
 const run = async (
   cmd: string[]

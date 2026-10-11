@@ -177,19 +177,18 @@ generate-screenshots:
 
 # ─── release ──────────────────────────────────────────────────────────────────
 
+release-build TARGET:
+    nu scripts/release-build.nu {{ TARGET }}
+
+release-build-all:
+    nu scripts/release-build.nu all
+
 release-bump VERSION:
     nu scripts/release-bump.nu {{ VERSION }}
-
-release-build-linux:
-    nu scripts/release-build.nu unknown-linux-musl x86_64
-    nu scripts/release-build.nu unknown-linux-musl aarch64
-
-release-build-macos:
-    nu scripts/release-build.nu apple-darwin x86_64
-    nu scripts/release-build.nu apple-darwin aarch64
 
 release-upload TAG:
     sandbox bun scripts/release-upload.ts {{ TAG }}
 
 release-delete TAG:
+    git tag --delete {{ TAG }}
     sandbox bun scripts/release-delete.ts {{ TAG }}

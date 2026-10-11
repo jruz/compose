@@ -69,6 +69,7 @@
                 --tmpfs "$HOME"
                 --tmpfs /tmp
                 --bind "$(pwd)" "$(pwd)"
+                --ro-bind "$(git rev-parse --path-format=absolute --git-common-dir)" "$(git rev-parse --path-format=absolute --git-common-dir)"
                 --bind-try "$HOME/.bun/install/cache" "$HOME/.bun/install/cache"
                 --bind-try "$HOME/.cargo/registry" "$HOME/.cargo/registry"
                 --bind-try "$HOME/.cargo/git" "$HOME/.cargo/git"
@@ -77,7 +78,6 @@
                 --setenv PATH "${sandboxPath}:$SELF_DIR"
                 --setenv HOME "$HOME"
                 --setenv TMPDIR /tmp
-                --setenv REVISION "''${REVISION:-dev}"
                 --dev /dev
                 --proc /proc
               )

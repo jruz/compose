@@ -7,6 +7,7 @@ const VERSION_STRING: &str = concat!(
     env!("BUILD_TIME"),
 );
 
+#[must_use]
 pub fn clap_version() -> &'static str {
     VERSION_STRING
 }

@@ -5,3 +5,5 @@ tests/fixtures/docker_volumes/compose.yaml
 .claude/scheduled_tasks.lock
 .env
 result
+result
+.intentionally-empty-file.o
