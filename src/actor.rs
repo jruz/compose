@@ -210,11 +210,13 @@ async fn drain_stderr(rx: &mut mpsc::UnboundedReceiver<String>) -> Vec<String> {
     lines.into_iter().skip(skip).collect()
 }
 
-pub async fn stream_lines<R: tokio::io::AsyncRead + Unpin>(
+pub async fn stream_lines<R>(
     name: &str,
     reader: BufReader<R>,
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
-) {
+) where
+    R: tokio::io::AsyncRead + Unpin,
+{
     let mut lines = reader.lines();
     loop {
         match lines.next_line().await {
