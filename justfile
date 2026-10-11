@@ -98,6 +98,10 @@ rust-check:
     just rust-cargo-check
     just rust-fmt-check
     just rust-clippy-check
+    just rust-machete
+
+rust-machete:
+    sandbox cargo machete --with-metadata
 
 rust-clippy-check *ARGS='':
     sandbox cargo clippy --all-targets {{ARGS}}
