@@ -29,6 +29,7 @@ Config schema:
         build_args:                   # explicit --build-arg (default: resolved env)
           KEY: \"VALUE\"
         dockerfile: <string>          # dockerfile path (optional)
+        init: <bool>                  # forward signals and reap children via --init (opt-in)
         ports: [<host:container>]     # port mappings
         volumes: [<host:container>]   # volume mounts
         stop_timeout_secs: <int>      # seconds before force kill (default: 10)

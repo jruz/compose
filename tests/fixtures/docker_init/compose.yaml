@@ -1,0 +1,21 @@
+processes:
+  enabled:
+    type: oneshot
+    docker:
+      image: alpine:3.21
+      init: true
+    exec: ["sh", "-c", "test \"$$\" -ne 1 && echo init-enabled"]
+
+  disabled:
+    type: oneshot
+    depends_on: [enabled]
+    docker:
+      image: alpine:3.21
+      init: false
+    exec: ["sh", "-c", "test \"$$\" -eq 1 && echo init-disabled"]
+
+  omitted:
+    depends_on: [disabled]
+    docker:
+      image: alpine:3.21
+    exec: ["sh", "-c", "test \"$$\" -eq 1 && echo init-omitted"]
