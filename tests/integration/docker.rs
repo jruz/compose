@@ -90,6 +90,15 @@ fn docker_dns() {
 }
 
 #[test]
+fn docker_init() {
+    let output = run_docker_fixture("docker_init", "run");
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "init-enabled");
+    assert_stdout_contains(&output, "init-disabled");
+    assert_stdout_contains(&output, "init-omitted");
+}
+
+#[test]
 fn docker_env() {
     let output = run_docker_fixture("docker_env", "run");
     assert_exit_code(&output, 0);

@@ -417,6 +417,7 @@ fn spawn_process_actor(
             env,
             exec: expanded_exec.as_deref(),
             image: &image,
+            init: docker_config.init,
             name,
             network: net,
             ports: &ports,

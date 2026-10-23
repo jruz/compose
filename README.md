@@ -102,6 +102,7 @@ Instead of running shell commands, processes can run as containers via docker or
 - Services are reachable by their process name (e.g. process `db` is reachable as `db`)
 - Health checks run inside the container via `exec` (`command` uses `sh -c`, `exec` runs directly)
 - All containers and the network are cleaned up on exit
+- Set `docker.init: true` to add `--init` for Docker or Podman, forwarding signals and reaping child processes (useful for file watchers); omitted or `false` leaves runtime behavior unchanged
 
 ```
 compose up --config compose.yaml
@@ -156,6 +157,7 @@ processes:
     docker:
       build: ./app
       dockerfile: Dockerfile.dev
+      init: true
       ports:
         - "3000:3000"
       volumes:
@@ -241,6 +243,7 @@ processes:
       build_args: # explicit --build-arg map (default: resolved env vars)
         KEY: "VALUE"
       dockerfile: <string> # dockerfile path (optional)
+      init: <bool> # forward signals and reap children via --init (opt-in)
       ports: [<host:container>] # port mappings, supports ${VAR}
       volumes: [<host:container>] # volume mounts, supports ${VAR}
       stop_timeout_secs: <int> # seconds before force kill (default: 10)

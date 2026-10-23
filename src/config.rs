@@ -81,6 +81,7 @@ pub struct DockerConfig {
     pub build_args: Option<BTreeMap<String, String>>,
     pub dockerfile: Option<String>,
     pub image: Option<String>,
+    pub init: Option<bool>,
     #[serde(default)]
     pub ports: Vec<String>,
     pub stop_timeout_secs: Option<u64>,
