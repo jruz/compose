@@ -193,8 +193,15 @@ release-bump VERSION:
     nu scripts/release-bump.nu {{ VERSION }}
 
 release-upload TAG:
-    sandbox bun scripts/release-upload.ts {{ TAG }}
+    gh release view {{ TAG }} \
+        || gh release create {{ TAG }} \
+            --title {{ TAG }} \
+            --verify-tag
+    gh release upload {{ TAG }} \
+        {{ env("CI_REPO_NAME") }}-* \
+        --clobber
 
 release-delete TAG:
-    git tag --delete {{ TAG }}
-    sandbox bun scripts/release-delete.ts {{ TAG }}
+    gh release delete {{ TAG }} \
+        --cleanup-tag \
+        --yes

@@ -13,7 +13,7 @@
 Nix flake input:
 
 ```nix
-inputs.composeSrc.url = "git+https://codeberg.org/jruz/compose.git?ref=main";
+inputs.composeSrc.url = "git+https://github.com/jruz/compose.git?ref=main";
 ```
 
 Then add to your devshell:
