@@ -2,7 +2,7 @@
 set -eu
 
 REPO="jruz/compose"
-BASE_URL="https://codeberg.org/${REPO}/releases"
+BASE_URL="https://github.com/${REPO}/releases"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 detect_platform() {
@@ -10,8 +10,8 @@ detect_platform() {
   arch=$(uname -m)
 
   case "$os" in
-    Linux)  os="linux" ;;
-    Darwin) os="macos" ;;
+    Linux)  os="unknown-linux-musl" ;;
+    Darwin) os="apple-darwin" ;;
     *)
       echo "ERROR: unsupported OS: $os" >&2
       exit 1
@@ -20,7 +20,7 @@ detect_platform() {
 
   case "$arch" in
     x86_64)       arch="x86_64" ;;
-    aarch64|arm64) arch="arm64" ;;
+    aarch64|arm64) arch="aarch64" ;;
     *)
       echo "ERROR: unsupported architecture: $arch" >&2
       exit 1
@@ -31,8 +31,8 @@ detect_platform() {
 }
 
 fetch_latest_tag() {
-  url="https://codeberg.org/api/v1/repos/${REPO}/releases?limit=1"
-  tag=$(curl -fsSL "$url" | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p')
+  url="https://api.github.com/repos/${REPO}/releases/latest"
+  tag=$(curl -fsSL "$url" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
   if [ -z "$tag" ]; then
     echo "ERROR: could not fetch latest release tag" >&2
     exit 1

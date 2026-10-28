@@ -99,6 +99,7 @@
         defaultPackages = with pkgs; [
           deadnix
           fd
+          gh
           just
           nixfmt
           nushell
@@ -128,6 +129,7 @@
             echo "  ───────────────────────────"
             echo "  rust         ${rustVersion} (sandbox)"
             echo "  bun          ${pkgs.bun.version} (sandbox)"
+            echo "  gh           ${pkgs.gh.version}"
             echo ""
           '';
         };

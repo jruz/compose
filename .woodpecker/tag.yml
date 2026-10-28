@@ -11,10 +11,10 @@ steps:
   - name: AUTO_TAG
     image: bash
     environment:
-      CODEBERG_TOKEN:
-        from_secret: CODEBERG_TOKEN
+      GITHUB_TOKEN:
+        from_secret: GITHUB_TOKEN
     commands:
-      - git remote set-url origin "https://token:$${CODEBERG_TOKEN}@codeberg.org/${CI_REPO}.git"
+      - git remote set-url origin "https://x-access-token:$${GITHUB_TOKEN}@github.com/${CI_REPO}.git"
       - VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
       - TAG="v$VERSION"
       - |
