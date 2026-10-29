@@ -8,6 +8,12 @@ use crate::message;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("spawned process has no PID")]
+    MissingPid,
+
+    #[error(transparent)]
+    Pid(#[from] std::num::TryFromIntError),
+
     #[error("failed to spawn process {name}: {source}")]
     Spawn {
         name: String,
@@ -26,9 +32,11 @@ pub fn spawn_actor(
     let mut std_cmd = std::process::Command::new(shell);
     let piped_out = std::process::Stdio::piped();
     let piped_err = std::process::Stdio::piped();
+    let stdin = std::process::Stdio::null();
     std_cmd
         .arg("-c")
         .arg(command)
+        .stdin(stdin)
         .stdout(piped_out)
         .stderr(piped_err)
         .process_group(0);
@@ -50,7 +58,11 @@ pub fn spawn_actor(
 
     let actor_name = name.to_string();
     let channels = actor::ActorChannels { cmd_rx, event_tx };
-    let actor_future = actor::actor_loop(actor_name, spawned, channels, drain, actor::Driver::Exec);
+    let pid = spawned.id().ok_or(Error::MissingPid)?;
+    let pid = i32::try_from(pid)?;
+    let group = nix::unistd::Pid::from_raw(pid);
+    let driver = actor::Driver::Exec { group };
+    let actor_future = actor::actor_loop(actor_name, spawned, channels, drain, driver);
     let handle = tokio::spawn(actor_future);
 
     Ok(message::ActorHandle {

@@ -1,0 +1,17 @@
+processes:
+  service:
+    docker:
+      image: alpine:3.21
+      init: true
+      stop_timeout_secs: 20
+    exec:
+      - sh
+      - -c
+      - |
+        trap 'sleep 14; echo delayed-stop-complete; exit 0' TERM
+        touch /tmp/ready
+        while true; do sleep 0.1; done
+    health:
+      exec: [test, -f, /tmp/ready]
+      interval_secs: 1
+      timeout_secs: 30

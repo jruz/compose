@@ -1,15 +1,11 @@
 use std::os::unix::process::ExitStatusExt as _;
-use std::time::Duration;
-
-use nix::sys::signal::{self, Signal};
-use nix::unistd::Pid;
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::docker;
+use crate::exec_shutdown;
 use crate::message;
 
-const GRACEFUL_SHUTDOWN_SECS: u64 = 2;
 const STDERR_BUFFER_LINES: usize = 20;
 
 pub enum Driver {
@@ -18,7 +14,21 @@ pub enum Driver {
         container: String,
         stop_timeout_secs: Option<u64>,
     },
-    Exec,
+    Exec {
+        group: nix::unistd::Pid,
+    },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Docker(#[from] docker::Error),
+
+    #[error(transparent)]
+    ExecShutdown(#[from] exec_shutdown::Error),
+
+    #[error(transparent)]
+    Wait(#[from] std::io::Error),
 }
 
 pub struct ActorChannels {
@@ -110,11 +120,31 @@ pub fn setup_output_drain(
 
 pub async fn actor_loop(
     name: String,
+    child: tokio::process::Child,
+    channels: ActorChannels,
+    drain: OutputDrain,
+    driver: Driver,
+) -> Result<(), Error> {
+    let event_tx = channels.event_tx.clone();
+    let result = run_actor(&name, child, channels, drain, driver).await;
+    if let Err(error) = &result {
+        let send_result = event_tx.send(message::ActorExited {
+            code: 1,
+            name,
+            stderr_lines: vec![error.to_string()],
+        });
+        drop(send_result);
+    }
+    result
+}
+
+async fn run_actor(
+    name: &str,
     mut child: tokio::process::Child,
     channels: ActorChannels,
     drain: OutputDrain,
     driver: Driver,
-) {
+) -> Result<(), Error> {
     let ActorChannels {
         mut cmd_rx,
         event_tx,
@@ -128,16 +158,15 @@ pub async fn actor_loop(
 
     let status = tokio::select! {
         Some(message::Command::Kill) = cmd_rx.recv() => {
-            kill_process(&driver, &mut child).await;
-            return;
+            kill_process(&driver, &mut child).await?;
+            return Ok(());
         }
-        result = child.wait() => {
-            match result {
-                Ok(status) => status,
-                Err(_) => return,
-            }
-        }
+        result = child.wait() => result?,
     };
+
+    if let Driver::Exec { group } = driver {
+        exec_shutdown::terminate(group, &mut child).await?;
+    }
 
     if let Err(_recv_err) = stdout_done.await {}
     if let Err(_recv_err) = stderr_done.await {}
@@ -147,39 +176,50 @@ pub async fn actor_loop(
 
     let send_result = event_tx.send(message::ActorExited {
         code,
-        name,
+        name: name.to_string(),
         stderr_lines,
     });
     drop(send_result);
+    Ok(())
 }
 
-async fn kill_process(driver: &Driver, child: &mut tokio::process::Child) {
+async fn kill_process(driver: &Driver, child: &mut tokio::process::Child) -> Result<(), Error> {
     match driver {
-        Driver::Exec => graceful_kill(child).await,
+        Driver::Exec { group } => exec_shutdown::terminate(*group, child).await?,
         Driver::Docker {
             binary,
             container,
             stop_timeout_secs,
-        } => if let Err(_stop_err) = docker::stop(binary, container, *stop_timeout_secs).await {},
-    }
-}
-
-pub async fn graceful_kill(child: &mut tokio::process::Child) {
-    let Some(pid) = child.id() else {
-        return;
-    };
-    let Ok(pid) = i32::try_from(pid) else {
-        return;
-    };
-    let group = Pid::from_raw(pid);
-    if let Err(_signal_err) = signal::killpg(group, Signal::SIGTERM) {}
-    tokio::select! {
-        _status = child.wait() => {}
-        () = tokio::time::sleep(Duration::from_secs(GRACEFUL_SHUTDOWN_SECS)) => {
-            if let Err(_signal_err) = signal::killpg(group, Signal::SIGKILL) {}
-            let _wait = child.wait().await;
+        } => {
+            stop_container(binary, container, *stop_timeout_secs, child).await?;
         }
     }
+    Ok(())
+}
+
+async fn stop_container(
+    binary: &str,
+    container: &str,
+    timeout_secs: Option<u64>,
+    child: &mut tokio::process::Child,
+) -> Result<(), Error> {
+    let interval = std::time::Duration::from_millis(10);
+    while child.try_wait()?.is_none() {
+        if !docker::is_running(binary, container).await? {
+            tokio::time::sleep(interval).await;
+            continue;
+        }
+        match docker::stop(binary, container, timeout_secs).await {
+            Ok(()) | Err(docker::Error::StopNotFound { .. }) => {}
+            Err(error) => {
+                let error = error.into();
+                return Err(error);
+            }
+        }
+        child.wait().await?;
+        break;
+    }
+    Ok(())
 }
 
 fn exit_code_from_status(status: std::process::ExitStatus) -> u8 {

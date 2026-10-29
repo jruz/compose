@@ -146,6 +146,161 @@ fn interrupt_during_health_check_cleans_up_process() {
 }
 
 #[test]
+fn exec_services_do_not_inherit_stdin() {
+    let bin = binary_path();
+    let fixture = fixture_path("exec_stdin.yaml");
+    let script = format!(
+        "printf 'synthetic-input\\n' | \"{bin}\" run --config \"{fixture}\"",
+        bin = bin.display(),
+        fixture = fixture.display(),
+    );
+    let output = run_shell_script(&script);
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "[service] stdin-closed");
+}
+
+#[test]
+fn signal_shutdown_sigint_waits_for_direct_process() {
+    assert_signal_shutdown("exec_signal_shutdown.yaml", "INT");
+}
+
+#[test]
+fn signal_shutdown_sigterm_waits_for_direct_process() {
+    assert_signal_shutdown("exec_signal_shutdown.yaml", "TERM");
+}
+
+#[test]
+fn signal_shutdown_sigint_waits_for_descendant() {
+    assert_signal_shutdown("exec_descendant_shutdown.yaml", "INT");
+}
+
+#[test]
+fn signal_shutdown_sigterm_waits_for_descendant() {
+    assert_signal_shutdown("exec_descendant_shutdown.yaml", "TERM");
+}
+
+fn assert_signal_shutdown(fixture: &str, signal: &str) {
+    let output = signal_shutdown_fixture(fixture, signal);
+    let expected_code: i32 = 130;
+    assert_eq!(
+        output.status.code(),
+        Some(expected_code),
+        "stdout: {}\nstderr: {}",
+        output.stdout,
+        output.stderr
+    );
+    assert!(
+        output.stdout.contains("marker-at-compose-exit=present"),
+        "compose exited before TERM cleanup finished\nstdout: {}\nstderr: {}",
+        output.stdout,
+        output.stderr
+    );
+}
+
+#[test]
+fn shutdown_completion_on_main_exit() {
+    assert_shutdown_completion(
+        "run",
+        "  main:\n    depends_on: [wrapper]\n    command: exit 42\n",
+        42,
+    );
+}
+
+#[test]
+fn shutdown_completion_on_sibling_crash() {
+    assert_shutdown_completion(
+        "run",
+        "  crasher:\n    depends_on: [wrapper]\n    command: exit 7\n  main:\n    depends_on: [crasher]\n    command: exec sleep 30\n",
+        1,
+    );
+}
+
+#[test]
+fn shutdown_completion_on_oneshot_failure() {
+    assert_shutdown_completion(
+        "up",
+        "  task:\n    depends_on: [wrapper]\n    type: oneshot\n    command: exit 7\n",
+        1,
+    );
+}
+
+#[test]
+fn shutdown_completion_on_health_failure() {
+    assert_shutdown_completion(
+        "up",
+        "  unhealthy:\n    depends_on: [wrapper]\n    command: exec sleep 30\n    health:\n      command: 'false'\n      interval_secs: 1\n      timeout_secs: 1\n",
+        1,
+    );
+}
+
+#[test]
+fn shutdown_completion_on_startup_error() {
+    assert_shutdown_completion(
+        "up",
+        "  broken:\n    depends_on: [wrapper]\n    command: exec sleep 30\n    env_file: /compose-test-missing-env-file\n",
+        1,
+    );
+}
+
+#[test]
+fn signal_shutdown_during_startup_waits_for_descendant() {
+    for signal in ["INT", "TERM"] {
+        let action = format!("kill -{signal} \"$COMPOSE_PID\"");
+        let output = shutdown_fixture(
+            "exec_descendant_shutdown.yaml",
+            "up",
+            &action,
+            "    health:\n      command: 'false'\n      interval_secs: 1\n      timeout_secs: 30\n",
+        );
+        assert_shutdown_marker(&output, 130);
+    }
+}
+
+#[test]
+fn signal_shutdown_escalates_term_ignoring_descendants() {
+    let output = escalation_shutdown_fixture();
+    let expected_code: i32 = 130;
+    assert_eq!(
+        output.status.code(),
+        Some(expected_code),
+        "stdout: {}\nstderr: {}",
+        output.stdout,
+        output.stderr
+    );
+    assert!(output.stdout.contains("descendant-stopped"));
+}
+
+#[test]
+fn shutdown_completion_after_wrapper_exits_naturally() {
+    let output = shutdown_fixture("exec_orphan_shutdown.yaml", "run", ":", "");
+    assert_shutdown_marker(&output, 23);
+}
+
+fn assert_shutdown_completion(subcommand: &str, trigger: &str, expected_code: i32) {
+    let extra = format!(
+        "    health:\n      command: 'test -s \"$COMPOSE_TEST_DIR/ready\"'\n      interval_secs: 1\n      timeout_secs: 10\n{trigger}"
+    );
+    let output = shutdown_fixture("exec_descendant_shutdown.yaml", subcommand, ":", &extra);
+    assert_shutdown_marker(&output, expected_code);
+}
+
+fn assert_shutdown_marker(output: &InterruptedOutput, expected_code: i32) {
+    assert_eq!(
+        output.status.code(),
+        Some(expected_code),
+        "stdout: {}\nstderr: {}",
+        output.stdout,
+        output.stderr
+    );
+    assert!(
+        output.stdout.contains("marker-at-compose-exit=present"),
+        "cleanup incomplete at compose exit\nstdout: {}\nstderr: {}",
+        output.stdout,
+        output.stderr
+    );
+}
+
+#[test]
 fn graceful_shutdown() {
     let output = run_fixture("graceful_shutdown.yaml", "run");
     assert_exit_code(&output, 0);

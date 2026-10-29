@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
+use crate::actor;
 use crate::config;
 use crate::docker;
 use crate::docker_actor;
@@ -14,6 +15,12 @@ use crate::shutdown;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error(transparent)]
+    Actor(#[from] actor::Error),
+
+    #[error(transparent)]
+    ActorJoin(#[from] tokio::task::JoinError),
+
     #[error(transparent)]
     DockerActor(#[from] docker_actor::Error),
 
@@ -153,7 +160,7 @@ pub async fn start_all(
                 return Ok(result);
             }
             let completed_actor = take_actor(actors, name)?;
-            drop(completed_actor.join.await);
+            completed_actor.join.await??;
         } else {
             let health_info = build_health_info(proc_def, &env, name, network, channels.binary);
 

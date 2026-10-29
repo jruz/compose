@@ -20,6 +20,15 @@ pub enum Error {
     #[error("docker exec failed: {source}")]
     Exec { source: std::io::Error },
 
+    #[error("docker inspect failed: {source}")]
+    Inspect { source: std::io::Error },
+
+    #[error("docker inspect failed: {stderr}")]
+    InspectFailed { stderr: String },
+
+    #[error(transparent)]
+    InspectOutput(#[from] std::str::ParseBoolError),
+
     #[error("docker network create failed: {source}")]
     NetworkCreate { source: std::io::Error },
 
@@ -62,6 +71,9 @@ pub enum Error {
 
     #[error("docker stop failed for {name} (killed by signal)")]
     StopKilled { name: String },
+
+    #[error("container {name} no longer exists")]
+    StopNotFound { name: String },
 }
 
 pub struct RunConfig<'cfg> {
@@ -195,6 +207,32 @@ pub async fn exec_shell(
         .map_err(|source| Error::Exec { source })
 }
 
+pub async fn is_running(binary: &str, name: &str) -> Result<bool, Error> {
+    let output = match process::Command::new(binary)
+        .args([
+            "container",
+            "inspect",
+            "--format",
+            "{{.State.Running}}",
+            name,
+        ])
+        .output()
+        .await
+    {
+        Ok(output) => output,
+        Err(source) => return Err(Error::Inspect { source }),
+    };
+    if output.status.success() {
+        let running = String::from_utf8_lossy(&output.stdout).trim().parse()?;
+        return Ok(running);
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if stderr.contains("No such container") || stderr.contains("no such container") {
+        return Ok(false);
+    }
+    Err(Error::InspectFailed { stderr })
+}
+
 pub async fn stop(binary: &str, name: &str, timeout_secs: Option<u64>) -> Result<(), Error> {
     let mut cmd = process::Command::new(binary);
     cmd.arg("stop");
@@ -215,6 +253,11 @@ pub async fn stop(binary: &str, name: &str, timeout_secs: Option<u64>) -> Result
             });
         };
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.contains("No such container") || stderr.contains("no such container") {
+            return Err(Error::StopNotFound {
+                name: name.to_string(),
+            });
+        }
         return Err(Error::StopFailed {
             name: name.to_string(),
             code,
