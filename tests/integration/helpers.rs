@@ -142,7 +142,7 @@ pub fn interrupt_docker_fixture_after_healthy(
     process_name: &str,
 ) -> InterruptedOutput {
     let readiness = format!(
-        "rg --fixed-strings --line-regexp --quiet \"[{process_name}] healthy\" \"$COMPOSE_CAPTURE\""
+        "rg --no-config --fixed-strings --line-regexp --quiet \"[{process_name}] healthy\" \"$COMPOSE_CAPTURE\""
     );
     interrupt_docker_fixture(fixture_dir, subcommand, &readiness)
 }
@@ -181,6 +181,129 @@ pub fn interrupt_fixture_after_process_starts(
     let after_ready =
         "COMPOSE_SERVICE_PID=$(cat \"$COMPOSE_MARKER\")\necho service-pid=$COMPOSE_SERVICE_PID";
     let script = build_interrupt_script(&command, readiness, after_ready, 60);
+    run_interrupt_script(&script, None)
+}
+
+pub fn signal_shutdown_fixture(fixture: &str, signal: &str) -> InterruptedOutput {
+    let action = format!("kill -{signal} \"$COMPOSE_PID\"");
+    shutdown_fixture(fixture, "up", &action, "")
+}
+
+pub fn shutdown_fixture(
+    fixture: &str,
+    subcommand: &str,
+    action: &str,
+    extra_config: &str,
+) -> InterruptedOutput {
+    let config = fixture_path(fixture);
+    let bin = binary_path();
+    let support = include_str!("../support/interrupt.sh");
+    let script = format!(
+        r#"{support}
+export COMPOSE_TEST_DIR
+COMPOSE_STARTUP_TIMEOUT=10
+cp "{config}" "$COMPOSE_TEST_DIR/compose.yaml" || exit $?
+cat >> "$COMPOSE_TEST_DIR/compose.yaml" <<'COMPOSE_CONFIG'
+{extra_config}
+COMPOSE_CONFIG
+"{bin}" {subcommand} --config "$COMPOSE_TEST_DIR/compose.yaml" >"$COMPOSE_CAPTURE" 2>&1 &
+COMPOSE_PID=$!
+echo compose-pid=$COMPOSE_PID
+trap cleanup_interrupt EXIT
+trap 'exit 124' TERM
+wait_for_startup 'test -s "$COMPOSE_TEST_DIR/ready"' || exit $?
+{action}
+wait "$COMPOSE_PID"
+STATUS=$?
+if test -f "$COMPOSE_TEST_DIR/stopped"; then
+    echo marker-at-compose-exit=present
+else
+    echo marker-at-compose-exit=absent
+fi
+DEADLINE=$(( $(date +%s) + 5 ))
+until test -f "$COMPOSE_TEST_DIR/stopped"; do
+    if test "$(date +%s)" -ge "$DEADLINE"; then
+        read -r SERVICE_PID < "$COMPOSE_TEST_DIR/ready"
+        kill -KILL "$SERVICE_PID" || exit $?
+        exit 124
+    fi
+    sleep 0.01
+done
+echo marker-eventually=present
+exit "$STATUS"
+"#,
+        bin = bin.display(),
+        config = config.display(),
+    );
+    run_interrupt_script(&script, None)
+}
+
+pub fn docker_runtime_shutdown_fixture(runtime_script: &str) -> InterruptedOutput {
+    let dir = fixture_path("docker_stop_timeout");
+    let bin = binary_path();
+    let support = include_str!("../support/interrupt.sh");
+    let script = format!(
+        r#"{support}
+COMPOSE_REAL_DOCKER=$(command -v docker) || exit $?
+export COMPOSE_REAL_DOCKER
+mkdir "$COMPOSE_TEST_DIR/bin" || exit $?
+cat > "$COMPOSE_TEST_DIR/bin/docker" <<'DOCKER_SCRIPT'
+#!/bin/sh
+{runtime_script}
+DOCKER_SCRIPT
+chmod +x "$COMPOSE_TEST_DIR/bin/docker" || exit $?
+export PATH="$COMPOSE_TEST_DIR/bin:$PATH"
+cd "{dir}" || exit $?
+"{bin}" run --config compose.yaml >"$COMPOSE_CAPTURE" 2>&1 &
+COMPOSE_PID=$!
+echo compose-pid=$COMPOSE_PID
+trap cleanup_interrupt EXIT
+trap 'exit 124' TERM
+wait "$COMPOSE_PID"
+exit $?
+"#,
+        bin = bin.display(),
+        dir = dir.display(),
+    );
+    run_interrupt_script(&script, None)
+}
+
+pub fn escalation_shutdown_fixture() -> InterruptedOutput {
+    let config = fixture_path("exec_ignores_term.yaml");
+    let bin = binary_path();
+    let support = include_str!("../support/interrupt.sh");
+    let script = format!(
+        r#"{support}
+export COMPOSE_TEST_DIR
+COMPOSE_STARTUP_TIMEOUT=10
+"{bin}" up --config "{config}" >"$COMPOSE_CAPTURE" 2>&1 &
+COMPOSE_PID=$!
+echo compose-pid=$COMPOSE_PID
+trap cleanup_interrupt EXIT
+trap 'exit 124' TERM
+wait_for_startup 'test -s "$COMPOSE_TEST_DIR/ready"' || exit $?
+read -r SERVICE_PID < "$COMPOSE_TEST_DIR/ready"
+START=$(date +%s)
+kill -INT "$COMPOSE_PID"
+wait "$COMPOSE_PID"
+STATUS=$?
+ELAPSED=$(( $(date +%s) - START ))
+echo shutdown-seconds=$ELAPSED
+if test "$ELAPSED" -gt 6; then exit 124; fi
+if test -f "/proc/$SERVICE_PID/stat"; then
+    read -r PID COMM STATE REST < "/proc/$SERVICE_PID/stat"
+    if test "$STATE" != Z; then
+        kill -KILL "$SERVICE_PID" || exit $?
+        echo descendant-survived
+        exit 1
+    fi
+fi
+echo descendant-stopped
+exit "$STATUS"
+"#,
+        bin = bin.display(),
+        config = config.display(),
+    );
     run_interrupt_script(&script, None)
 }
 

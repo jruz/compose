@@ -1,0 +1,15 @@
+processes:
+  wrapper:
+    command: |
+      sh -c '
+        terminated() {
+          sleep 1
+          touch "$COMPOSE_TEST_DIR/stopped"
+          exit 0
+        }
+        trap terminated TERM
+        echo $$ > "$COMPOSE_TEST_DIR/ready"
+        while true; do sleep 0.1; done
+      ' >/dev/null 2>&1 &
+      while ! test -s "$COMPOSE_TEST_DIR/ready"; do sleep 0.01; done
+      exit 23

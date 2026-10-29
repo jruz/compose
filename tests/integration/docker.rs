@@ -167,7 +167,7 @@ fn interrupt_after_docker_becomes_healthy_cleans_up_resources() {
     let fixture = "docker_sigterm";
     let process_name = "sig-server";
     let output = interrupt_docker_fixture_after_healthy(fixture, "up", process_name);
-    assert_docker_shutdown_cleans_up_resources(&output, fixture, process_name);
+    assert_docker_shutdown_cleans_up_resources(&output, fixture, process_name, 130);
 
     let healthy = output.stdout.find("[sig-server] healthy");
     let killing = output.stdout.find("[sig-server] killing");
@@ -192,17 +192,35 @@ fn interrupt_after_docker_becomes_healthy_cleans_up_resources() {
 }
 
 #[test]
+fn docker_shutdown_waits_beyond_twelve_seconds_before_cleanup() {
+    let fixture = "docker_long_shutdown";
+    let output = interrupt_docker_fixture_after_healthy(fixture, "up", "service");
+    assert_docker_shutdown_cleans_up_resources(&output, fixture, "service", 130);
+    let stopped = output.stdout.find("[service] delayed-stop-complete");
+    let removing = output.stdout.rfind("[docker] removing containers");
+    assert!(
+        stopped
+            .zip(removing)
+            .is_some_and(|(stop, remove)| stop < remove),
+        "container cleanup raced graceful stop\nstdout: {}\nstderr: {}",
+        output.stdout,
+        output.stderr
+    );
+}
+
+#[test]
 fn interrupt_during_docker_health_check_cleans_up_resources() {
     let fixture = "docker_interrupt_health";
     let process_name = "startup-service";
     let output = interrupt_docker_fixture_after_container_starts(fixture, "up", process_name);
-    assert_docker_shutdown_cleans_up_resources(&output, fixture, process_name);
+    assert_docker_shutdown_cleans_up_resources(&output, fixture, process_name, 130);
 }
 
 fn assert_docker_shutdown_cleans_up_resources(
     output: &InterruptedOutput,
     fixture: &str,
     process_name: &str,
+    expected_code: i32,
 ) {
     let network = format!("{fixture}-{}", output.pid);
     let container = format!("{network}-{process_name}");
@@ -218,7 +236,6 @@ fn assert_docker_shutdown_cleans_up_resources(
         docker_resource_cleanup(&["network", "rm", &network]);
     }
 
-    let expected_code: i32 = 130;
     assert_eq!(
         output.status.code(),
         Some(expected_code),
@@ -583,6 +600,28 @@ fn docker_env_passthrough() {
     );
     assert_exit_code(&output, 0);
     assert_stdout_contains(&output, "MY_VAR=passed-through");
+}
+
+#[test]
+fn docker_shutdown_waits_for_delayed_container_creation() {
+    let output = docker_runtime_shutdown_fixture(
+        "if test \"$1\" = run; then sleep 1; fi\nexec \"$COMPOSE_REAL_DOCKER\" \"$@\"",
+    );
+    assert_docker_shutdown_cleans_up_resources(&output, "docker_stop_timeout", "stubborn", 0);
+}
+
+#[test]
+fn docker_shutdown_surfaces_stop_failure() {
+    let output = docker_runtime_shutdown_fixture(
+        "if test \"$1\" = stop; then echo injected-stop-failure >&2; exit 7; fi\nexec \"$COMPOSE_REAL_DOCKER\" \"$@\"",
+    );
+    assert_docker_shutdown_cleans_up_resources(&output, "docker_stop_timeout", "stubborn", 1);
+    assert!(
+        output.stdout.contains("injected-stop-failure"),
+        "shutdown error missing\nstdout: {}\nstderr: {}",
+        output.stdout,
+        output.stderr
+    );
 }
 
 #[test]

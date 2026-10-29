@@ -6,6 +6,7 @@ mod docker;
 mod docker_actor;
 mod docker_infra;
 mod env;
+mod exec_shutdown;
 mod formatter;
 mod health;
 mod lifecycle;

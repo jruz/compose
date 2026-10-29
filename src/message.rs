@@ -74,7 +74,7 @@ pub enum DisplayMsg {
 
 pub struct ActorHandle {
     pub cmd_tx: tokio::sync::mpsc::UnboundedSender<Command>,
-    pub join: tokio::task::JoinHandle<()>,
+    pub join: tokio::task::JoinHandle<Result<(), crate::actor::Error>>,
     pub name: String,
 }
 

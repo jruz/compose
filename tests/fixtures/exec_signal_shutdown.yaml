@@ -1,0 +1,11 @@
+processes:
+  trapper:
+    command: |
+      terminated() {
+        sleep 1
+        touch "$COMPOSE_TEST_DIR/stopped"
+        exit 0
+      }
+      trap terminated TERM
+      echo $$ > "$COMPOSE_TEST_DIR/ready"
+      while true; do sleep 0.1; done
