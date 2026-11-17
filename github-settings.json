@@ -1,0 +1,51 @@
+{
+  "actions": {
+    "enabled": false
+  },
+  "branch_protection": null,
+  "labels": [
+    {
+      "color": "d73a4a",
+      "name": "bugs"
+    },
+    {
+      "color": "0075ca",
+      "name": "deps"
+    },
+    {
+      "color": "2da44e",
+      "name": "feat"
+    },
+    {
+      "color": "a2eeef",
+      "name": "refa"
+    },
+    {
+      "color": "7057ff",
+      "name": "tool"
+    }
+  ],
+  "repository": "jruz/compose",
+  "security": {
+    "automated-security-fixes": false,
+    "vulnerability-alerts": true
+  },
+  "settings": {
+    "allow_auto_merge": true,
+    "allow_merge_commit": false,
+    "allow_rebase_merge": false,
+    "allow_squash_merge": true,
+    "archived": false,
+    "default_branch": "main",
+    "delete_branch_on_merge": true,
+    "description": null,
+    "has_issues": true,
+    "has_projects": false,
+    "has_wiki": false,
+    "is_template": false,
+    "private": false
+  },
+  "topics": {
+    "names": []
+  }
+}
