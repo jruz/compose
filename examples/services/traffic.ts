@@ -2,7 +2,11 @@ import { log } from "../../scripts/log";
 
 const API = "http://localhost:8555";
 type Path = string;
-const PATHS: readonly Path[] = ["/api/v1/users", "/api/v1/users/42", "/api/v1/orders"];
+const PATHS: readonly Path[] = [
+  "/api/v1/users",
+  "/api/v1/users/42",
+  "/api/v1/orders",
+];
 const TOTAL = 15;
 
 const sendRequest = async (index: number): Promise<void> => {
@@ -24,13 +28,10 @@ const main = async () => {
 
   const indices = Array.from({ length: TOTAL }, (_, i) => i);
   const initial = Promise.resolve();
-  await indices.reduce(
-    async (prev, i) => {
-      await prev;
-      await sendRequest(i);
-    },
-    initial,
-  );
+  await indices.reduce(async (prev, i) => {
+    await prev;
+    await sendRequest(i);
+  }, initial);
 
   log.info("traffic generation complete");
   process.exit(0);

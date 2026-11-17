@@ -9,21 +9,25 @@ Lightweight process orchestrator. Reads a YAML config, spawns processes with dep
 - `just fix` - auto-fix fmt and clippy
 - `just install` - install the binary to `~/.cargo/bin`
 - `just generate-screenshots` - regenerate README gifs from `examples/vhs/*.tape`
-- `just sandbox-check` - verify sandbox isolation
 
 ## Pointers
 
 - `justfile` - all recipes
-- `flake.nix` - dev shell, `sandbox` and `sandbox-docker` wrappers
+- `flake.nix` - dev shell and Docker sandbox wrapper
 - `src/` - one module per concern, entry point `src/main.rs`
 - `tests/integration/` - integration tests
 - `tests/fixtures/` - test configs
 
 ## Notes
 
-- `sandbox-docker` mounts the Docker socket, so `just test` and all dependency code it runs can bypass filesystem isolation
-- the Docker opt-in is specific to this project; don't copy it into skills
+- `scripts/rust-test.nu` opts into host Docker access for integration tests
+- Docker-enabled tests can bypass filesystem isolation through the host daemon
+- Keep the test runner's Docker access options specific to this project
 - tests run the compiled binary via `env!("CARGO_BIN_EXE_compose")`, not library calls
+
+## Release
+
+- `just release bump <patch|minor|major>` starts a Woodpecker release from `origin/main`.
 
 ## Documentation
 

@@ -1,6 +1,4 @@
 {
-  description = "compose: lightweight process orchestrator";
-
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-26.05";
     rust-overlay = {
@@ -14,8 +12,8 @@
     {
       self,
       nixpkgs,
-      rust-overlay,
       flake-utils,
+      rust-overlay,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
@@ -23,117 +21,92 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
-        rustToolchain = builtins.fromTOML (builtins.readFile ./rust-toolchain.toml);
-        rustVersion = rustToolchain.toolchain.channel;
         rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-        cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = rust;
+          rustc = rust;
+        };
+        cargoToml = fromTOML (builtins.readFile ./Cargo.toml);
+        rustVersion = (fromTOML (builtins.readFile ./rust-toolchain.toml)).toolchain.channel;
+        projectName = cargoToml.package.name;
         revision = self.rev or "dirty";
-        muslTarget = "${pkgs.stdenv.hostPlatform.uname.processor}-unknown-linux-musl";
-        muslArgs = pkgs.lib.optionalString pkgs.stdenv.isLinux "ARGS+=(--setenv CARGO_BUILD_TARGET ${muslTarget})";
-        rustPlatform = if pkgs.stdenv.isLinux then pkgs.pkgsStatic.rustPlatform else pkgs.rustPlatform;
-        sandboxPath = pkgs.lib.makeBinPath [
-          rust
-          pkgs.bash
-          pkgs.bun
-          pkgs.cargo-edit
-          pkgs.cargo-machete
-          pkgs.cargo-nextest
-          pkgs.cargo-outdated
-          pkgs.cargo-watch
-          pkgs.coreutils
-          pkgs.curl
-          pkgs.docker-client
-          pkgs.findutils
-          pkgs.gcc
-          pkgs.git
-          pkgs.gnugrep
-          pkgs.just
-          pkgs.nushell
-          pkgs.podman
-          pkgs.ripgrep
-          pkgs.woodpecker-cli
-        ];
-        mkSandbox =
-          name: dockerEnabled:
-          pkgs.writeShellScriptBin name (
-            ''
-              SELF_DIR="$(dirname "$(readlink -f "$0")")"
-              ARGS=(
-                --unshare-all
-                --share-net
-                --die-with-parent
-                --ro-bind /nix /nix
-                --ro-bind /etc/resolv.conf /etc/resolv.conf
-                --ro-bind /etc/ssl /etc/ssl
-                --ro-bind-try /etc/static /etc/static
-                --ro-bind-try /etc/nix /etc/nix
-                --ro-bind-try /run/current-system/sw /run/current-system/sw
-                --symlink ${pkgs.coreutils}/bin/env /usr/bin/env
-                --symlink ${pkgs.bash}/bin/bash /bin/sh
-                --tmpfs "$HOME"
-                --tmpfs /tmp
-                --bind "$(pwd)" "$(pwd)"
-                --ro-bind "$(git rev-parse --path-format=absolute --git-common-dir)" "$(git rev-parse --path-format=absolute --git-common-dir)"
-                --bind-try "$HOME/.bun/install/cache" "$HOME/.bun/install/cache"
-                --bind-try "$HOME/.cargo/registry" "$HOME/.cargo/registry"
-                --bind-try "$HOME/.cargo/git" "$HOME/.cargo/git"
-                --ro-bind-try "$HOME/.gitconfig" "$HOME/.gitconfig"
-                --ro-bind-try "$HOME/.ssh/known_hosts" "$HOME/.ssh/known_hosts"
-                --setenv PATH "${sandboxPath}:$SELF_DIR"
-                --setenv HOME "$HOME"
-                --setenv TMPDIR /tmp
-                --dev /dev
-                --proc /proc
-              )
-            ''
-            + pkgs.lib.optionalString dockerEnabled ''
-              ARGS+=(--bind /var/run/docker.sock /var/run/docker.sock)
-            ''
-            + ''
-              ${muslArgs}
-              exec ${pkgs.bubblewrap}/bin/bwrap "''${ARGS[@]}" -- "$@"
-            ''
-          );
-        sandbox = mkSandbox "sandbox" false;
-        sandboxDocker = mkSandbox "sandbox-docker" true;
-        defaultPackages = with pkgs; [
-          deadnix
-          fd
-          gh
-          just
-          nixfmt
-          nushell
-          sandbox
-          sandboxDocker
-          statix
-        ];
+        release = builtins.fromJSON (builtins.readFile ./release.json);
+        platform = release.platforms.${system};
+        sandbox = pkgs.writeShellScriptBin "sandbox" ''
+          export PATH=${
+            pkgs.lib.makeBinPath [
+              pkgs.docker-client
+              pkgs.git
+              pkgs.coreutils
+            ]
+          }:"$PATH"
+          exec ${pkgs.nushell}/bin/nu ${./scripts/sandbox.nu} "$@"
+        '';
       in
       {
-        packages.default = rustPlatform.buildRustPackage {
-          pname = cargoToml.package.name;
+        packages.default = pkgs.stdenvNoCC.mkDerivation {
+          pname = projectName;
+          inherit (release) version;
+          src = pkgs.fetchurl {
+            url = "https://github.com/jruz/${projectName}/releases/download/v${release.version}/${platform.asset}";
+            inherit (platform) hash;
+          };
+          dontUnpack = true;
+          dontStrip = true;
+          installPhase = ''
+            runHook preInstall
+            install -Dm755 "$src" "$out/bin/${projectName}"
+            install -Dm644 ${./LICENSE} "$out/share/licenses/${projectName}/LICENSE"
+            runHook postInstall
+          '';
+          meta = {
+            mainProgram = projectName;
+            license = pkgs.lib.licenses.eupl12;
+            platforms = builtins.attrNames release.platforms;
+          };
+        };
+
+        packages.source = rustPlatform.buildRustPackage {
+          pname = projectName;
           inherit (cargoToml.package) version;
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
+          postInstall = ''
+            install -Dm644 ${./LICENSE} "$out/share/licenses/${projectName}/LICENSE"
+          '';
+          meta = {
+            mainProgram = projectName;
+            license = pkgs.lib.licenses.eupl12;
+          };
           REVISION = revision;
           CARGO_HOME = "$TMPDIR";
           doCheck = false;
+          nativeBuildInputs = pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.mold ];
           buildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin [ pkgs.libiconv ];
         };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = defaultPackages;
+          packages = with pkgs; [
+            fd
+            gh
+            git
+            just
+            nushell
+            oxfmt
+            podman
+            ripgrep
+            sandbox
+          ];
 
           shellHook = ''
             echo ""
-            echo "  Compose Dev Shell"
-            echo "  ───────────────────────────"
-            echo "  rust         ${rustVersion} (sandbox)"
-            echo "  bun          ${pkgs.bun.version} (sandbox)"
-            echo "  gh           ${pkgs.gh.version}"
+            echo "  Development Shell"
+            echo "  ─────────────────"
+            echo "  nixpkgs      ${pkgs.lib.trivial.release}"
+            echo "  rust         ${rustVersion} (docker)"
             echo ""
           '';
         };
-
       }
     );
 }

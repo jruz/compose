@@ -5,7 +5,11 @@ const PG = "http://localhost:5555";
 const REDIS = "http://localhost:6555";
 
 type Migration = string;
-const MIGRATIONS: readonly Migration[] = ["001_create_users", "002_create_orders", "003_add_indexes"];
+const MIGRATIONS: readonly Migration[] = [
+  "001_create_users",
+  "002_create_orders",
+  "003_add_indexes",
+];
 
 type Route = Readonly<{ method: string; path: string }>;
 const ROUTES: readonly Route[] = [
@@ -53,7 +57,9 @@ const handleRequest = async (req: Request): Promise<Response> => {
 
     const ms = (performance.now() - start).toFixed(1);
     log.info(`${req.method} ${url.pathname} 200 ${ms}ms`);
-    return new Response(body, { headers: { "content-type": "application/json" } });
+    return new Response(body, {
+      headers: { "content-type": "application/json" },
+    });
   } catch (e) {
     const ms = (performance.now() - start).toFixed(1);
     const msg = e instanceof Error ? e.message : String(e);

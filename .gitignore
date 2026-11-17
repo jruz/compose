@@ -1,9 +1,16 @@
+.direnv/
+/target/
+/tmp/*
+!/tmp/.gitkeep
+/node_modules/
+/PLAN.md
+result
+.intentionally-empty-file.o
+
+# project entries below, everything above is managed by template-sync
 /target
 .direnv
 PLAN.md
 tests/fixtures/docker_volumes/compose.yaml
 .claude/scheduled_tasks.lock
 .env
-result
-result
-.intentionally-empty-file.o

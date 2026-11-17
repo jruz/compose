@@ -1,7 +1,23 @@
 use std::ffi::OsString;
 use std::process::Command;
 
-type BuildResult<T> = Result<T, Box<dyn std::error::Error>>;
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("{program} {arguments}: {reason}")]
+    Command {
+        program: String,
+        arguments: String,
+        reason: String,
+    },
+    #[error("REVISION is not valid UTF-8")]
+    InvalidRevision,
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Utf8(#[from] std::string::FromUtf8Error),
+}
+
+type BuildResult<T> = Result<T, Error>;
 
 struct Revision {
     value: String,
@@ -11,12 +27,12 @@ struct Revision {
 fn run(program: &str, args: &[&str]) -> BuildResult<String> {
     let output = Command::new(program).args(args).output()?;
     if !output.status.success() {
-        let command = args.join(" ");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let reason = stderr.trim();
-        let message = format!("{program} {command}: {reason}");
-        let error: Box<dyn std::error::Error> = message.into();
-        return Err(error);
+        let stderr = String::from_utf8(output.stderr)?;
+        return Err(Error::Command {
+            program: program.to_owned(),
+            arguments: args.join(" "),
+            reason: stderr.trim().to_owned(),
+        });
     }
     let stdout = String::from_utf8(output.stdout)?;
     let trimmed = stdout.trim().to_string();
@@ -45,8 +61,7 @@ fn git_revision() -> BuildResult<Revision> {
 
 fn env_revision(raw: OsString) -> BuildResult<Revision> {
     let Ok(value) = raw.into_string() else {
-        let error: Box<dyn std::error::Error> = "REVISION is not valid UTF-8".into();
-        return Err(error);
+        return Err(Error::InvalidRevision);
     };
     Ok(Revision {
         value,

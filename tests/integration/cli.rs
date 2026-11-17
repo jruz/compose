@@ -1,13 +1,38 @@
 use super::helpers::*;
 
-#[test]
-fn version_flag() {
-    let bin = binary_path();
-    let output = match std::process::Command::new(bin).arg("--version").output() {
+fn version_output(argument: &str) -> std::process::Output {
+    let binary = binary_path();
+    let directory = std::env::temp_dir();
+    let output = match std::process::Command::new(binary)
+        .arg(argument)
+        .current_dir(directory)
+        .output()
+    {
         Ok(output) => output,
         Err(err) => panic!("failed to execute binary: {err}"),
     };
     assert_eq!(output.status.code(), Some(0_i32));
+    assert_eq!(output.stderr, b"");
+    output
+}
+
+#[test]
+fn version_subcommand_matches_flag_without_config() {
+    let flag = version_output("--version");
+    let subcommand = version_output("version");
+    assert_eq!(subcommand.stdout, flag.stdout);
+}
+
+#[test]
+fn short_version_flag_matches_long_flag() {
+    let long = version_output("--version");
+    let short = version_output("-V");
+    assert_eq!(short.stdout, long.stdout);
+}
+
+#[test]
+fn version_flag() {
+    let output = version_output("--version");
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
 
     let Some(version_line) = stdout.lines().find(|line| line.contains("version: ")) else {

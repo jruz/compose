@@ -1,0 +1,5 @@
+{
+  "review": ["Dockerfile.rust"],
+  "revision": "f7ff68dd67e03d3e78d84d761579d133c8710545",
+  "template": "jruz/template-rs"
+}

@@ -2,33 +2,44 @@
   "actions": {
     "enabled": false
   },
-  "branch_protection": null,
+  "branch_protection": {
+    "required_status_checks": {
+      "strict": true,
+      "contexts": ["ci/woodpecker/pr/check"]
+    },
+    "enforce_admins": false,
+    "required_pull_request_reviews": null,
+    "restrictions": null,
+    "required_linear_history": true,
+    "allow_force_pushes": true,
+    "allow_deletions": false
+  },
   "labels": [
     {
-      "color": "d73a4a",
-      "name": "bugs"
+      "name": "bugs",
+      "color": "d73a4a"
     },
     {
-      "color": "0075ca",
-      "name": "deps"
+      "name": "deps",
+      "color": "0075ca"
     },
     {
-      "color": "2da44e",
-      "name": "feat"
+      "name": "feat",
+      "color": "2da44e"
     },
     {
-      "color": "a2eeef",
-      "name": "refa"
+      "name": "refa",
+      "color": "a2eeef"
     },
     {
-      "color": "7057ff",
-      "name": "tool"
+      "name": "tool",
+      "color": "7057ff"
     }
   ],
   "repository": "jruz/compose",
   "security": {
-    "automated-security-fixes": false,
-    "vulnerability-alerts": true
+    "vulnerability-alerts": true,
+    "automated-security-fixes": false
   },
   "settings": {
     "allow_auto_merge": true,

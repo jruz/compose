@@ -1,0 +1,58 @@
+set working-directory := '..'
+
+check:
+    just --justfile .tools/justfile nix-check
+    just --justfile .tools/justfile nushell-check
+    just --justfile .tools/justfile woodpecker-check
+    just --justfile .tools/justfile renovate-check
+
+fix:
+    just --justfile .tools/justfile nix-fix
+    just --justfile .tools/justfile nushell-fix
+
+nix-check:
+    fd \
+        --hidden \
+        --exclude tests/fixtures \
+        --extension nix \
+        --exec nixfmt --check
+    statix check --ignore 'tests/fixtures/**' .
+    deadnix --fail --exclude tests/fixtures -- .
+
+nix-fix:
+    fd \
+        --hidden \
+        --exclude tests/fixtures \
+        --extension nix \
+        --exec nixfmt
+    statix fix --ignore 'tests/fixtures/**' .
+    deadnix --edit --exclude tests/fixtures -- .
+
+nushell-check:
+    fd \
+        --hidden \
+        --exclude tests/fixtures \
+        --absolute-path \
+        --extension nu \
+        --exec nu --no-config-file \
+        --commands 'if not (nu-check --debug "{}") { exit 1 }'
+    fd \
+        --hidden \
+        --exclude tests/fixtures \
+        --extension nu \
+        --exec-batch nu-lint --config .tools/nu-lint.toml
+
+nushell-fix:
+    fd \
+        --hidden \
+        --exclude tests/fixtures \
+        --extension nu \
+        --exec-batch nu-lint \
+        --config .tools/nu-lint.toml \
+        --fix
+
+woodpecker-check:
+    woodpecker-cli lint .woodpecker/*.yml
+
+renovate-check:
+    renovate-config-validator --strict renovate.json

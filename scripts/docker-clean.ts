@@ -1,8 +1,6 @@
 import { log } from "./lib/log.ts";
 
-const run = async (
-  cmd: string[]
-): Promise<{ ok: boolean; stdout: string }> => {
+const run = async (cmd: string[]): Promise<{ ok: boolean; stdout: string }> => {
   const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
   const stdout = await new Response(proc.stdout).text();
   const code = await proc.exited;
@@ -54,15 +52,8 @@ const cleanImages = async () => {
 };
 
 const cleanNetworks = async () => {
-  const result = await run([
-    "docker",
-    "network",
-    "ls",
-    "--format={{.Name}}",
-  ]);
-  const nets = lines(result.stdout).filter((n) =>
-    n.startsWith("compose-")
-  );
+  const result = await run(["docker", "network", "ls", "--format={{.Name}}"]);
+  const nets = lines(result.stdout).filter((n) => n.startsWith("compose-"));
   if (nets.length === 0) {
     log.info("no compose-* networks found");
     return;

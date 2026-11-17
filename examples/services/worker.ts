@@ -13,7 +13,10 @@ const createShutdownSignal = (): (() => boolean) => {
   return () => stopped;
 };
 
-const processJob = async (jobCount: number, shouldStop: () => boolean): Promise<number> => {
+const processJob = async (
+  jobCount: number,
+  shouldStop: () => boolean,
+): Promise<number> => {
   if (shouldStop()) return jobCount;
 
   const delay = 500 + Math.random() * 1500;

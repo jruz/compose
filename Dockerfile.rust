@@ -1,0 +1,39 @@
+# check=skip=InvalidDefaultArgInFrom
+ARG RUST_VERSION
+FROM rust:${RUST_VERSION}-slim-trixie
+
+ARG TARGETARCH
+ARG CARGO_BINSTALL_VERSION=1.27.0
+
+SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+    'curl=8.14.1-2+deb13u7' \
+    'docker-cli=26.1.5+dfsg1-9+deb13u1' \
+    'docker-buildx=0.13.1+ds1-3' \
+    'ripgrep=14.1.1-1+b4' \
+    'git=1:2.47.3-0+deb13u1' \
+    'mold=2.37.1+dfsg-1' \
+    'musl-tools=1.2.5-3.1~deb13u1' \
+    'pkg-config=1.8.1-4' \
+    && rm --recursive --force /var/lib/apt/lists/*
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    rustup component add clippy rustfmt rust-analyzer rust-src \
+    && rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl \
+    && ARCH=$(if [ "$TARGETARCH" = "arm64" ]; then echo "aarch64"; else echo "x86_64"; fi) \
+    && curl --proto '=https' --tlsv1.2 -LsSf "https://github.com/cargo-bins/cargo-binstall/releases/download/v${CARGO_BINSTALL_VERSION}/cargo-binstall-${ARCH}-unknown-linux-musl.tgz" \
+    | tar -xz -C /usr/local/cargo/bin \
+    && cargo binstall --no-confirm \
+    cargo-nextest@0.9.151 \
+    cargo-watch@8.5.3 \
+    cargo-edit@0.13.14 \
+    cargo-machete@0.9.2 \
+    cargo-outdated@0.19.0 \
+    cargo-udeps@0.1.61 \
+    just@1.59.0 \
+    sqlx-cli@0.9.0
+
+WORKDIR /app

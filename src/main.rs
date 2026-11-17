@@ -1,6 +1,7 @@
 mod actor;
 mod build_actor;
 mod cli;
+mod commands;
 mod config;
 mod docker;
 mod docker_actor;
@@ -16,7 +17,7 @@ mod process;
 mod shutdown;
 mod startup;
 mod supervisor;
-mod version;
+mod utils;
 
 use std::process::ExitCode;
 
@@ -34,7 +35,19 @@ async fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
-    let config_path = cli::config_path(&cli.command);
+    let command = match cli.command {
+        cli::Command::Version => {
+            let output = commands::version::run();
+            print!("{}", output.text);
+            if output.success {
+                return ExitCode::SUCCESS;
+            }
+            return ExitCode::FAILURE;
+        }
+        cli::Command::Process(command) => command,
+    };
+
+    let config_path = cli::config_path(&command);
     let config = match config::load(config_path) {
         Ok(config) => config,
         Err(err) => {
@@ -45,8 +58,8 @@ async fn main() -> ExitCode {
 
     let (log_tx, mut log_rx) = mpsc::unbounded_channel();
 
-    let global_env_file = cli::env_file_path(&cli.command).cloned();
-    let config_dir = match cli::config_path(&cli.command).canonicalize() {
+    let global_env_file = cli::env_file_path(&command).cloned();
+    let config_dir = match cli::config_path(&command).canonicalize() {
         Ok(path) => path,
         Err(err) => {
             eprintln!("failed to resolve config path: {err}");
@@ -61,8 +74,7 @@ async fn main() -> ExitCode {
         eprintln!("failed to resolve project name from config path");
         return ExitCode::from(1);
     };
-    let supervisor_future =
-        supervisor::run(config, cli.command, global_env_file, project_name, log_tx);
+    let supervisor_future = supervisor::run(config, command, global_env_file, project_name, log_tx);
     let supervisor = tokio::spawn(supervisor_future);
 
     while let Some(line) = log_rx.recv().await {

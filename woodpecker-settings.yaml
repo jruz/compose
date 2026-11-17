@@ -3,26 +3,30 @@ repo:
 secrets:
   GITHUB_TOKEN:
     events:
-    - push
-    - tag
+      - tag
+      - push
+      - manual
+      - cron
     images: null
     value: |
       -----BEGIN AGE ENCRYPTED FILE-----
-      YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBleXhmeG1TMGV1VUQ1eEQw
-      ZW9aaTUvako3UVExQUdqVEV6RkJvckhlTEdZCmtjOWt6RjI5Q3E2ZkxEa2ZDMkll
-      Zm9RaGU3WGxzdjhyZE9vb0J4anRyK0kKLT4gQDl7LWdyZWFzZQpiV25wSklkQnNK
-      SXoxdFY5c1BoSHZKQ1owSmorUWlFdkhqNi9zc3JML0NSb3JUSHBYY2txTXBBCi0t
-      LSBqTGptcUFiZXgydjFpL281SGhBT245YU10cjR2bHA0VFVTMk85SWxkRXZvCgm+
-      B2Z0UhfX0XWzYuR0qld8JpcbDNBM6lNJgwmdqoDxhhgutkTd4YD4B138ljoVLQkp
-      grOMXkZwUDDrFlFXDVEIsRzPpye5dg==
+      YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBjMmRBOGZidmJhdDBEN0pL
+      L1htYi9Cc0tKa2RSTE5KdDFiZW9ReURzWEEwCjdWQWlKMEZKMnJyQlg1QUNESUhF
+      eTJFSUQ3dDRLVkZBdlZRZUh1MlU4RUUKLT4gbTwtZ3JlYXNlICFUcC8gYVxBR0ss
+      ICMlMUkKVTRURHp2Z1NVQjdCQWFOU0t3NnZQZHd6QVJRTkt4UFhCRlVnaTBxV3A5
+      YWJvT0JFdW40d2xhNjh1NlMyQ3VTLwo4Y01lRFNlaXlFRXZ1ayt2cXhuanNtdVlh
+      aTd6c0VLZDVlbFQ1RXByOERUUmw5TEtZb3F2ZjRvOVlQdURPVmJRCi9QNAotLS0g
+      TDJLNEt1MjByQVlzQjV5MW1XbWsvUnBDUndpeWRIUE1ONmNBakhGVVZCQQr1zXLG
+      rBvXg3FK5EEm3x/VKwhBAqq4RtjyfP+x0LUW8QsbBv3HGkog9pSwycvDN2XR33sp
+      4B56zBdCaLbVdmFw/W0c8jea6/I=
       -----END AGE ENCRYPTED FILE-----
 settings:
   allow_deploy: false
   allow_pr: true
   cancel_previous_pipeline_events:
-  - push
-  - pull_request
-  config_extension_endpoint: ''
+    - push
+    - pull_request
+  config_extension_endpoint: ""
   require_approval: forks
   timeout: 60
   trusted:

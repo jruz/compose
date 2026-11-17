@@ -1,3 +1,4 @@
-#!/usr/bin/env nu
-
-just check-ci
+#!/bin/sh
+set -eu
+just check
+just test

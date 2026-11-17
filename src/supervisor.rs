@@ -62,7 +62,7 @@ struct RunState<'run> {
 
 pub async fn run(
     config: config::Config,
-    mode: cli::Command,
+    mode: cli::ProcessCommand,
     global_env_file: Option<PathBuf>,
     project_name: String,
     log_tx: mpsc::UnboundedSender<String>,
@@ -245,11 +245,11 @@ fn check_main_not_oneshot(
 }
 
 fn resolve_shutdown(
-    mode: &cli::Command,
+    mode: &cli::ProcessCommand,
     start_order: &[String],
 ) -> Result<lifecycle::ShutdownStrategy, Error> {
     match mode {
-        cli::Command::Run(_) => {
+        cli::ProcessCommand::Run(_) => {
             let main = start_order
                 .last()
                 .ok_or_else(|| Error::ProcessNotFound {
@@ -259,6 +259,6 @@ fn resolve_shutdown(
             let strategy = lifecycle::ShutdownStrategy::MainProcess(main);
             Ok(strategy)
         }
-        cli::Command::Up(_) => Ok(lifecycle::ShutdownStrategy::AnyExit),
+        cli::ProcessCommand::Up(_) => Ok(lifecycle::ShutdownStrategy::AnyExit),
     }
 }

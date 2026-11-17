@@ -35,6 +35,8 @@ cargo install --path .
 
 ## Usage
 
+`compose version`, `compose --version`, and `compose -V` show the version, revision, and build time without loading a config.
+
 ### `run` — run a task with its depending services
 
 - Starts all processes. When the last declared process exits, all others are killed.
@@ -317,4 +319,4 @@ Failure
 
 ## License
 
-[AGPL-3.0](LICENSE)
+Licensed under the [EUPL](LICENSE).

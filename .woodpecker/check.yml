@@ -1,7 +1,6 @@
 when:
   - event: push
     branch: main
-  - event: manual
   - event: pull_request
 
 steps:
@@ -10,4 +9,5 @@ steps:
     environment:
       REVISION: ${CI_COMMIT_SHA}
     commands:
-      - nix develop --command just check-ci
+      - nix develop --no-update-lock-file --command just check
+      - nix develop --no-update-lock-file --command just test

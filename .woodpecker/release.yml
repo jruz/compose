@@ -1,19 +1,15 @@
 when:
-  - event: tag
+  - event: manual
+    branch: main
 
 steps:
-  - name: BUILD
-    image: bash
-    environment:
-      REVISION: ${CI_COMMIT_SHA}
-    commands:
-      - nix develop --command just release-build-all
-
-  - name: RELEASE
+  - name: PUBLISH
     image: bash
     environment:
       GITHUB_TOKEN:
         from_secret: GITHUB_TOKEN
     commands:
-      - ls -la ${CI_REPO_NAME}-*
-      - nix develop --command just release-upload ${CI_COMMIT_TAG}
+      - nix develop --no-update-lock-file --command gh auth setup-git --hostname github.com
+      - nix develop --no-update-lock-file --command git config --local user.name 'Woodpecker Bot'
+      - nix develop --no-update-lock-file --command git config --local user.email 'bot@jruz.io'
+      - nix develop --no-update-lock-file --command just release publish "$RELEASE_VERSION"

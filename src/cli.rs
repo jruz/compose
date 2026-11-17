@@ -2,11 +2,11 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
-use crate::version;
+use crate::commands::version;
 
 #[derive(Debug, Parser)]
 #[command(
-    version = version::clap_version(),
+    version = version::text(),
     about = "Simple process orchestrator",
     long_about = "\
 Simple process orchestrator
@@ -72,20 +72,28 @@ pub struct ConfigArg {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    #[command(flatten)]
+    Process(ProcessCommand),
+    #[command(about = "Show version and build metadata")]
+    Version,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProcessCommand {
     #[command(about = "Run all processes, exit with the last process's exit code")]
     Run(ConfigArg),
     #[command(about = "Keep all processes running, any exit triggers shutdown")]
     Up(ConfigArg),
 }
 
-pub fn config_path(command: &Command) -> &PathBuf {
+pub fn config_path(command: &ProcessCommand) -> &PathBuf {
     match command {
-        Command::Run(args) | Command::Up(args) => &args.config,
+        ProcessCommand::Run(args) | ProcessCommand::Up(args) => &args.config,
     }
 }
 
-pub fn env_file_path(command: &Command) -> Option<&PathBuf> {
+pub fn env_file_path(command: &ProcessCommand) -> Option<&PathBuf> {
     match command {
-        Command::Run(args) | Command::Up(args) => args.env_file.as_ref(),
+        ProcessCommand::Run(args) | ProcessCommand::Up(args) => args.env_file.as_ref(),
     }
 }

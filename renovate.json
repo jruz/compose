@@ -1,0 +1,88 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["cargo", "rust-toolchain", "custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts/release\\.nu$/"],
+      "matchStrings": [
+        "const BUILD_IMAGE = '(?<depName>[^']+):(?<currentValue>\\d+\\.\\d+\\.\\d+)'"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^Dockerfile\\.rust$/"],
+      "matchStrings": [
+        "[ \\t](?<depName>[a-z][a-z0-9-]*)@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "crate",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^Dockerfile\\.rust$/"],
+      "matchStrings": [
+        "ARG CARGO_BINSTALL_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "cargo-bins/cargo-binstall",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^Dockerfile\\.rust$/"],
+      "matchStrings": [
+        "'(?<depName>[a-z][a-z0-9+.-]*)=(?<currentValue>[^'\\s]+)'"
+      ],
+      "datasourceTemplate": "deb",
+      "versioningTemplate": "deb"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^Dockerfile\\.rust$/", "/^renovate\\.json$/"],
+      "matchStrings": [
+        "FROM rust:\\$\\{RUST_VERSION\\}-slim-(?<currentValue>[a-z]+)",
+        "suite=(?<currentValue>[a-z]+)(?:-updates|-security)?&"
+      ],
+      "depNameTemplate": "debian",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "debian"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["debian"],
+      "groupName": "Debian release",
+      "allowedVersions": "/^[a-z]+$/",
+      "rangeStrategy": "replace",
+      "ignoreUnstable": true
+    },
+    {
+      "matchFileNames": ["Dockerfile.rust"],
+      "matchDatasources": ["deb"],
+      "registryUrls": [
+        "https://deb.debian.org/debian?suite=trixie&components=main&binaryArch=amd64",
+        "https://deb.debian.org/debian?suite=trixie-updates&components=main&binaryArch=amd64",
+        "https://deb.debian.org/debian-security?suite=trixie-security&components=main&binaryArch=amd64"
+      ],
+      "minimumReleaseAge": "0 days"
+    }
+  ],
+  "rangeStrategy": "pin",
+  "minimumReleaseAge": "7 days",
+  "semanticCommits": "disabled",
+  "commitMessagePrefix": "[deps] {{{depName}}}:",
+  "commitMessageTopic": "",
+  "commitMessageLowerCase": "never",
+  "automerge": true,
+  "automergeType": "pr",
+  "platformAutomerge": true,
+  "automergeStrategy": "squash",
+  "rebaseWhen": "behind-base-branch"
+}

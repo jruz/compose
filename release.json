@@ -1,0 +1,21 @@
+{
+  "version": "0.5.4",
+  "platforms": {
+    "x86_64-linux": {
+      "asset": "compose-unknown-linux-musl-x86_64",
+      "hash": "sha256-MeTEsA4HsOCzN2ALN/Jo5GFwiuf+koPrWxbA9K8gVzg="
+    },
+    "aarch64-linux": {
+      "asset": "compose-unknown-linux-musl-aarch64",
+      "hash": "sha256-2WYgEVWZh7D/l1VdysqiocPeInGAiiX5ZZvE9w1gWFU="
+    },
+    "x86_64-darwin": {
+      "asset": "compose-apple-darwin-x86_64",
+      "hash": "sha256-rHS77z1hQ9jaIwX7jZGgTZeUSoWItFpErAkZE/AhXEU="
+    },
+    "aarch64-darwin": {
+      "asset": "compose-apple-darwin-aarch64",
+      "hash": "sha256-mVRNWLlZzY4HByTzJV64SF+gx98+YeNGNTE64itsFAc="
+    }
+  }
+}
