@@ -23,13 +23,11 @@ pub struct RunConfig<'cfg> {
     pub command: Option<&'cfg str>,
     pub env: &'cfg BTreeMap<String, String>,
     pub exec: Option<&'cfg [String]>,
+    pub flags: &'cfg [String],
     pub image: &'cfg str,
-    pub init: Option<bool>,
     pub name: &'cfg str,
     pub network: &'cfg str,
-    pub ports: &'cfg [String],
     pub stop_timeout_secs: Option<u64>,
-    pub volumes: &'cfg [String],
 }
 
 pub fn spawn_actor(
@@ -44,11 +42,9 @@ pub fn spawn_actor(
         env: run.env,
         exec: run.exec,
         image: run.image,
-        init: run.init,
+        flags: run.flags,
         network: run.network,
         network_alias: run.name,
-        ports: run.ports,
-        volumes: run.volumes,
     };
     let std_cmd = docker::run_command(run.binary, &docker_run);
     let mut cmd = tokio::process::Command::from(std_cmd);

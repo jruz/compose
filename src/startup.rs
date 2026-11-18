@@ -406,30 +406,23 @@ fn spawn_process_actor(
         .as_ref()
         .map(|args| args.iter().map(|arg| env::expand_vars(arg, env)).collect());
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
-        let image_ref = docker_config.image.as_deref();
+        let image_ref = docker_config
+            .image
+            .as_ref()
+            .map(|value| env::expand_vars(value, env));
+        let image_ref = image_ref.as_deref();
         let image = docker::image_tag(net, name, image_ref);
-        let ports: Vec<String> = docker_config
-            .ports
-            .iter()
-            .map(|port| env::expand_vars(port, env))
-            .collect();
-        let volumes: Vec<String> = docker_config
-            .volumes
-            .iter()
-            .map(|vol| env::expand_vars(vol, env))
-            .collect();
+        let flags = crate::docker_flags::args(&docker_config.run, env);
         let run_config = docker_actor::RunConfig {
             binary: channels.binary,
             command: expanded_command.as_deref(),
             env,
             exec: expanded_exec.as_deref(),
             image: &image,
-            init: docker_config.init,
+            flags: &flags,
             name,
             network: net,
-            ports: &ports,
             stop_timeout_secs: docker_config.stop_timeout_secs,
-            volumes: &volumes,
         };
         let events = channels.events.clone();
         let display = channels.display.clone();

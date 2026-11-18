@@ -37,7 +37,7 @@ pub async fn build(
         let Some(docker_config) = &proc_def.docker else {
             continue;
         };
-        let Some(build_context) = &docker_config.build else {
+        let Some(build) = &docker_config.build else {
             continue;
         };
 
@@ -45,13 +45,16 @@ pub async fn build(
             message::DisplayMsg::Docker(message::DockerMsg::Building { name: name.clone() });
         send_display(display_tx, building_msg)?;
 
-        let image = docker_config.image.as_deref();
-        let tag = docker::image_tag(network, name, image);
-        let build_args = resolve_build_args(docker_config, global_env, proc_def)?;
-
-        let dockerfile = docker_config.dockerfile.as_deref();
-        let mut build_cmd =
-            docker::build_command(binary, &tag, build_context, dockerfile, &build_args);
+        let env = env::resolve(global_env, proc_def)?;
+        let image = docker_config
+            .image
+            .as_ref()
+            .map(|value| env::expand_vars(value, &env));
+        let image_ref = image.as_deref();
+        let tag = docker::image_tag(network, name, image_ref);
+        let build_context = env::expand_vars(&build.context, &env);
+        let args = crate::docker_flags::build_args(&build.flags, &env);
+        let mut build_cmd = docker::build_command(binary, &tag, &build_context, &args);
         let mut child =
             process::spawn_child(&mut build_cmd).map_err(|source| docker::Error::Build {
                 context: build_context.clone(),
@@ -110,20 +113,6 @@ pub async fn build(
     }
 
     Ok(())
-}
-
-fn resolve_build_args(
-    docker_config: &config::DockerConfig,
-    global_env: &BTreeMap<String, String>,
-    proc_def: &config::ProcessDef,
-) -> Result<BTreeMap<String, String>, Error> {
-    if let Some(args) = &docker_config.build_args {
-        let cloned = args.clone();
-        Ok(cloned)
-    } else {
-        let resolved = env::resolve(global_env, proc_def)?;
-        Ok(resolved)
-    }
 }
 
 fn send_display(

@@ -50,6 +50,16 @@ fn docker_no_image() {
 }
 
 #[test]
+fn docker_reserved_flag() {
+    let output = run_fixture("validation_docker_reserved_flag.yaml", "run");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(
+        &output,
+        "web: docker.run.detach: flag is managed by Compose",
+    );
+}
+
+#[test]
 fn docker_both_command_exec() {
     let output = run_fixture("validation_docker_both_command_exec.yaml", "run");
     assert_ne!(output.status.code(), Some(0_i32));

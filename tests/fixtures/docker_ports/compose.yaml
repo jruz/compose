@@ -2,9 +2,11 @@ processes:
   port-srv:
     docker:
       image: compose-test-port-srv:1
-      build: ./server
-      ports:
-        - "18793:8080"
+      build:
+        context: ./server
+      run:
+        publish:
+          - "18793:8080"
     health:
       command: "cat /tmp/ready"
       interval_secs: 1

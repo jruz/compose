@@ -1,0 +1,6 @@
+processes:
+  web:
+    docker:
+      image: alpine:3.21
+      run:
+        detach: true

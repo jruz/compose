@@ -12,6 +12,12 @@ pub enum Error {
     #[error("{name}: docker process cannot have both command and exec")]
     DockerBothCommandAndExec { name: String },
 
+    #[error("{name}: {source}")]
+    DockerFlags {
+        name: String,
+        source: crate::docker_flags::Error,
+    },
+
     #[error("{name}: docker requires image or build")]
     DockerNoImageOrBuild { name: String },
 
@@ -76,17 +82,11 @@ pub enum Runtime {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DockerConfig {
-    pub build: Option<String>,
-    #[serde(default)]
-    pub build_args: Option<BTreeMap<String, String>>,
-    pub dockerfile: Option<String>,
+    pub build: Option<crate::docker_flags::Build>,
     pub image: Option<String>,
-    pub init: Option<bool>,
     #[serde(default)]
-    pub ports: Vec<String>,
+    pub run: crate::docker_flags::Flags,
     pub stop_timeout_secs: Option<u64>,
-    #[serde(default)]
-    pub volumes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -233,7 +233,14 @@ fn check_driver(name: &str, proc_def: &ProcessDef) -> Result<(), Error> {
         None if proc_def.command.is_none() => Err(Error::ExecNoCommand {
             name: name.to_string(),
         }),
-        Some(_) | None => Ok(()),
+        Some(docker) => match crate::docker_flags::validate(docker) {
+            Ok(()) => Ok(()),
+            Err(source) => Err(Error::DockerFlags {
+                name: name.to_string(),
+                source,
+            }),
+        },
+        None => Ok(()),
     }
 }
 

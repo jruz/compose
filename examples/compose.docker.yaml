@@ -2,8 +2,9 @@ processes:
   postgres:
     docker:
       image: postgres:16-alpine
-      ports:
-        - "5432:5432"
+      run:
+        publish:
+          - "5432:5432"
     env:
       POSTGRES_PASSWORD: devpass
       POSTGRES_DB: app
@@ -15,8 +16,9 @@ processes:
   redis:
     docker:
       image: redis:7-alpine
-      ports:
-        - "6379:6379"
+      run:
+        publish:
+          - "6379:6379"
     health:
       command: "redis-cli ping"
       interval_secs: 1
@@ -25,6 +27,7 @@ processes:
   api:
     docker:
       image: nginx:alpine
-      ports:
-        - "8080:80"
+      run:
+        publish:
+          - "8080:80"
     depends_on: [postgres, redis]

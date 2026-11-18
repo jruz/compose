@@ -2,7 +2,8 @@ processes:
   hc-service:
     docker:
       image: compose-test-hc-service:1
-      build: ./service
+      build:
+        context: ./service
     health:
       command: "cat /tmp/healthy"
       interval_secs: 1
@@ -11,5 +12,6 @@ processes:
   hc-consumer:
     docker:
       image: compose-test-hc-consumer:1
-      build: ./consumer
+      build:
+        context: ./consumer
     depends_on: [hc-service]

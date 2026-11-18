@@ -1,5 +1,6 @@
 processes:
   api:
     docker:
-      ports:
-        - "8080:8080"
+      run:
+        publish:
+          - "8080:8080"

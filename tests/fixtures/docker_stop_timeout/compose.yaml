@@ -2,7 +2,8 @@ processes:
   stubborn:
     docker:
       image: compose-test-stubborn:1
-      build: ./app
+      build:
+        context: ./app
       stop_timeout_secs: 1
 
   trigger:

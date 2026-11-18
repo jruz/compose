@@ -2,5 +2,6 @@ processes:
   echo-exec:
     docker:
       image: compose-test-echo-exec:1
-      build: .
+      build:
+        context: .
     exec: ["echo", "hello from exec"]

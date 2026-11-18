@@ -2,9 +2,11 @@ processes:
   build-bg:
     docker:
       image: compose-test-build-bg:1
-      build: ./worker
+      build:
+        context: ./worker
 
   build-main:
     docker:
       image: compose-test-build-main:1
-      build: ./app
+      build:
+        context: ./app

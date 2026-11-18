@@ -4,6 +4,7 @@ mod cli;
 mod config;
 mod docker;
 mod docker_actor;
+mod docker_flags;
 mod docker_infra;
 mod env;
 mod exec_shutdown;

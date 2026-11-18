@@ -102,7 +102,7 @@ Instead of running shell commands, processes can run as containers via docker or
 - Services are reachable by their process name (e.g. process `db` is reachable as `db`)
 - Health checks run inside the container via `exec` (`command` uses `sh -c`, `exec` runs directly)
 - All containers and the network are cleaned up on exit
-- Set `docker.init: true` to add `--init` for Docker or Podman, forwarding signals and reaping child processes (useful for file watchers); omitted or `false` leaves runtime behavior unchanged
+- Set `docker.run.init: true` to add `--init` for Docker or Podman, forwarding signals and reaping child processes (useful for file watchers); omitted or `false` leaves runtime behavior unchanged
 
 ```
 compose up --config compose.yaml
@@ -115,8 +115,9 @@ processes:
   postgres:
     docker:
       image: postgres:16-alpine
-      ports:
-        - "${PG_PORT}:5432"
+      run:
+        publish:
+          - "${PG_PORT}:5432"
     env:
       POSTGRES_PASSWORD: "${PG_PASSWORD}"
       POSTGRES_DB: "${PG_DB}"
@@ -128,8 +129,9 @@ processes:
   redis:
     docker:
       image: redis:7-alpine
-      ports:
-        - "${REDIS_PORT}:6379"
+      run:
+        publish:
+          - "${REDIS_PORT}:6379"
     health:
       command: "redis-cli ping"
       interval_secs: 1
@@ -138,8 +140,9 @@ processes:
   api:
     docker:
       image: nginx:alpine
-      ports:
-        - "${API_PORT}:80"
+      run:
+        publish:
+          - "${API_PORT}:80"
     depends_on: [postgres, redis]
 ```
 
@@ -155,13 +158,15 @@ Build from a Dockerfile instead of pulling an image:
 processes:
   app:
     docker:
-      build: ./app
-      dockerfile: Dockerfile.dev
-      init: true
-      ports:
-        - "3000:3000"
-      volumes:
-        - "/absolute/path/to/src:/app/src"
+      build:
+        context: ./app
+        file: Dockerfile.dev
+      run:
+        init: true
+        publish:
+          - "3000:3000"
+        volume:
+          - "/absolute/path/to/src:/app/src"
 ```
 
 Pass explicit build args to `docker build`:
@@ -170,13 +175,20 @@ Pass explicit build args to `docker build`:
 processes:
   app:
     docker:
-      build: ./app
-      build_args:
-        NODE_VERSION: "22"
-        ENV: "development"
+      build:
+        context: ./app
+        build-arg:
+          NODE_VERSION: "${NODE_VERSION}"
+          ENV: "development"
 ```
 
-When `build_args` is omitted, all resolved env vars (inline `env`, `env_file`, global `--env-file`) are forwarded as `--build-arg`.
+When `build-arg` is omitted, resolved env vars (inline `env`, `env_file`, global `--env-file`) are forwarded as build args. Set `build-arg: {}` to forward none. Use explicit build args for non-secret inputs.
+
+Use Docker or Podman long flag names without `--`. Scalars become `--flag=value`; lists repeat the flag. `build-arg` and `label` also accept maps, which produce `--flag=KEY=value`. Quote version numbers to preserve their text.
+
+Compose reserves build `tag`, `progress`, and `help`, and run `attach`, `detach`, `help`, `log-driver`, `name`, `net`, `network`, `network-alias`, `restart`, `rm`, and `stop-timeout`. Use `docker.stop_timeout_secs` for shutdown timing.
+
+To migrate older configs, move `build` into `build.context`, `dockerfile` into `build.file`, `build_args` into `build.build-arg`, and `init`, `ports`, and `volumes` into `run.init`, `run.publish`, and `run.volume`.
 
 ### Environment variables
 
@@ -203,15 +215,17 @@ With sops-encrypted secrets via process substitution:
 compose run --config compose.yaml --env-file <(sops --decrypt secrets.env)
 ```
 
-Variable interpolation with `${VAR}` — all string values support interpolation from resolved env vars and host environment:
+Variable interpolation with `${VAR}` uses resolved env vars and host environment:
 
 ```yaml
 processes:
   app:
     docker:
-      build: .
-      ports:
-        - "${APP_PORT}:${APP_PORT}"
+      build:
+        context: .
+      run:
+        publish:
+          - "${APP_PORT}:${APP_PORT}"
     command: "node server.js --port ${APP_PORT}"
     env:
       APP_PORT: "3000"
@@ -222,10 +236,10 @@ processes:
       timeout_secs: 10
 ```
 
-Applies to: `command`, `exec`, `ports`, `volumes`, `health.command`, `health.exec`, and `env` values.
+Applies to: `command`, `exec`, `docker.image`, `docker.build.context`, build and run flag values, `health.command`, `health.exec`, and `env` values.
 Undefined variables stay literal: `${UNKNOWN}` remains `${UNKNOWN}`.
 
-Precedence: process env > env file > host environment.
+Precedence: inline env > process env file > global env file > host environment.
 
 ## Config schema
 
@@ -239,13 +253,11 @@ processes:
     exec: [<string>, ...] # container CMD override, exec form (docker only), supports ${VAR}
     docker: # presence of this section makes it a docker process
       image: <string> # docker image (required if no build)
-      build: <string> # build context path (required if no image)
-      build_args: # explicit --build-arg map (default: resolved env vars)
-        KEY: "VALUE"
-      dockerfile: <string> # dockerfile path (optional)
-      init: <bool> # forward signals and reap children via --init (opt-in)
-      ports: [<host:container>] # port mappings, supports ${VAR}
-      volumes: [<host:container>] # volume mounts, supports ${VAR}
+      build: # required if no image
+        context: <string> # build context path
+        <flag>: <value> # Docker or Podman build flag
+      run:
+        <flag>: <value> # Docker or Podman run flag
       stop_timeout_secs: <int> # seconds before force kill (default: 10)
     depends_on: [<string>, ...] # processes that must be healthy first
     env:

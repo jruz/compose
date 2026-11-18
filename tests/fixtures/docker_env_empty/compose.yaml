@@ -2,7 +2,8 @@ processes:
   empty-env-main:
     docker:
       image: compose-test-empty-env-main:1
-      build: ./app
+      build:
+        context: ./app
     env:
       EMPTY_VAR: ""
       SET_VAR: "has-value"

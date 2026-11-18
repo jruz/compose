@@ -81,12 +81,10 @@ pub struct RunConfig<'cfg> {
     pub container_name: &'cfg str,
     pub env: &'cfg BTreeMap<String, String>,
     pub exec: Option<&'cfg [String]>,
+    pub flags: &'cfg [String],
     pub image: &'cfg str,
-    pub init: Option<bool>,
     pub network: &'cfg str,
     pub network_alias: &'cfg str,
-    pub ports: &'cfg [String],
-    pub volumes: &'cfg [String],
 }
 
 pub fn container_name(network: &str, process_name: &str) -> String {
@@ -100,25 +98,14 @@ pub fn image_tag(network: &str, process_name: &str, image: Option<&str>) -> Stri
     }
 }
 
-pub fn build_command(
-    binary: &str,
-    tag: &str,
-    context: &str,
-    dockerfile: Option<&str>,
-    build_args: &BTreeMap<String, String>,
-) -> process::Command {
+pub fn build_command(binary: &str, tag: &str, context: &str, flags: &[String]) -> process::Command {
     let mut cmd = process::Command::new(binary);
-    cmd.arg("build")
-        .arg("--progress=plain")
-        .arg("--tag")
-        .arg(tag);
-    if let Some(file) = dockerfile {
-        cmd.arg("--file").arg(file);
+    cmd.arg("build");
+    if binary == "docker" {
+        cmd.arg("--progress=plain");
     }
-    for (key, value) in build_args {
-        cmd.arg("--build-arg").arg(format!("{key}={value}"));
-    }
-    cmd.arg(context);
+    cmd.arg("--tag").arg(tag);
+    cmd.args(flags).arg("--").arg(context);
     let piped_out = std::process::Stdio::piped();
     let piped_err = std::process::Stdio::piped();
     cmd.stdout(piped_out).stderr(piped_err);
@@ -139,23 +126,11 @@ pub fn run_command(binary: &str, run: &RunConfig<'_>) -> std::process::Command {
         .arg("--log-driver")
         .arg("none");
 
-    if run.init == Some(true) {
-        cmd.arg("--init");
-    }
-
     for (key, value) in run.env {
         cmd.arg("--env").arg(format!("{key}={value}"));
     }
 
-    for port in run.ports {
-        cmd.arg("--publish").arg(port);
-    }
-
-    for volume in run.volumes {
-        cmd.arg("--volume").arg(volume);
-    }
-
-    cmd.arg(run.image);
+    cmd.args(run.flags).arg("--").arg(run.image);
 
     match (run.command, run.exec) {
         (Some(shell_cmd), _) => {
@@ -353,37 +328,49 @@ mod tests {
 
     use crate::config;
     use crate::docker;
+    use crate::docker_flags;
 
     #[test]
     fn init_flag_is_opt_in_for_both_runtimes() {
         let env = BTreeMap::new();
         for binary in ["docker", "podman"] {
-            for (field, enabled) in [("", false), ("init: false", false), ("init: true", true)] {
+            for (field, flag) in [
+                ("", None),
+                ("run: {init: false}", Some("--init=false")),
+                ("run: {init: true}", Some("--init=true")),
+            ] {
                 let yaml = format!("image: alpine:3.21\n{field}\n");
                 let config: config::DockerConfig = match serde_yml::from_str(&yaml) {
                     Ok(config) => config,
                     Err(error) => panic!("failed to parse init config: {error}"),
                 };
+                let flags = docker_flags::args(&config.run, &env);
                 let run = docker::RunConfig {
                     command: None,
                     container_name: "test-service",
                     env: &env,
                     exec: None,
                     image: "alpine:3.21",
-                    init: config.init,
+                    flags: &flags,
                     network: "test-network",
                     network_alias: "service",
-                    ports: &[],
-                    volumes: &[],
                 };
                 let command = docker::run_command(binary, &run);
                 let args: Vec<_> = command.get_args().collect();
                 assert_eq!(command.get_program(), binary);
-                assert_eq!(args.contains(&OsStr::new("--init")), enabled);
-                if enabled {
-                    let init = args.iter().position(|arg| *arg == "--init");
+                assert_eq!(
+                    args.iter()
+                        .find(|arg| arg.to_string_lossy().starts_with("--init"))
+                        .copied(),
+                    flag.map(OsStr::new)
+                );
+                if let Some(flag) = flag {
+                    let init = args.iter().position(|arg| *arg == flag);
                     let image = args.iter().position(|arg| *arg == "alpine:3.21");
-                    assert!(init.zip(image).is_some_and(|(flag, image)| flag < image));
+                    assert!(
+                        init.zip(image)
+                            .is_some_and(|(flag_pos, image_pos)| flag_pos < image_pos)
+                    );
                 }
             }
         }

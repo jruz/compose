@@ -9,10 +9,12 @@ processes:
 
   api:
     docker:
-      build: examples/docker-fail/api
+      build:
+        context: examples/docker-fail/api
     depends_on: [redis]
 
   crasher:
     docker:
-      build: examples/docker-fail/crasher
+      build:
+        context: examples/docker-fail/crasher
     depends_on: [redis]

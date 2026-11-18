@@ -2,4 +2,5 @@ processes:
   broken:
     docker:
       image: compose-test-broken:1
-      build: ./broken
+      build:
+        context: ./broken

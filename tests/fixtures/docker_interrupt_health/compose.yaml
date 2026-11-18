@@ -2,7 +2,8 @@ processes:
   startup-service:
     docker:
       image: compose-test-interrupt-health:1
-      build: .
+      build:
+        context: .
     health:
       command: "false"
       interval_secs: 1

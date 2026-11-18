@@ -2,7 +2,8 @@ processes:
   service:
     docker:
       image: alpine:3.21
-      init: true
+      run:
+        init: true
       stop_timeout_secs: 20
     exec:
       - sh

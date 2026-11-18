@@ -2,9 +2,11 @@ processes:
   crash-worker:
     docker:
       image: compose-test-crash-worker:1
-      build: ./crasher
+      build:
+        context: ./crasher
 
   crash-main:
     docker:
       image: compose-test-crash-main:1
-      build: ./main
+      build:
+        context: ./main

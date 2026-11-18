@@ -2,7 +2,8 @@ processes:
   dns-server:
     docker:
       image: compose-test-dns-server:1
-      build: ./server
+      build:
+        context: ./server
     health:
       command: "true"
       interval_secs: 1
@@ -11,5 +12,6 @@ processes:
   dns-client:
     docker:
       image: compose-test-dns-client:1
-      build: ./client
+      build:
+        context: ./client
     depends_on: [dns-server]

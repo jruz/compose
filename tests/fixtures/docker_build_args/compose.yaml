@@ -1,7 +1,40 @@
 processes:
-  build-args-main:
+  implicit:
+    type: oneshot
     docker:
-      image: compose-test-build-args:1
-      build: ./app
-      build_args:
-        GREETING: hello-from-build-arg
+      build:
+        context: ./app
+    env:
+      GREETING: implicit-from-env
+  empty:
+    type: oneshot
+    depends_on: [implicit]
+    docker:
+      build:
+        context: ./app
+        build-arg: {}
+    env:
+      GREETING: not-forwarded
+  build-args-main:
+    depends_on: [empty]
+    docker:
+      image: "${IMAGE_NAME}:1"
+      build:
+        context: "${BUILD_CONTEXT}"
+        file: "${BUILD_FILE}"
+        build-arg:
+          GREETING: "${MESSAGE}"
+      run:
+        workdir: "${WORKDIR}"
+        read-only: true
+        tmpfs:
+          - "${WORKDIR}"
+          - /second
+    exec: ["sh", "-ec", "touch write-check /second/write-check; pwd; cat /greeting.txt"]
+    env:
+      BUILD_CONTEXT: ./app
+      BUILD_FILE: app/Dockerfile
+      GREETING: overridden
+      IMAGE_NAME: compose-test-build-args
+      MESSAGE: hello from build arg
+      WORKDIR: /first

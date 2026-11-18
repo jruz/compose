@@ -2,7 +2,8 @@ processes:
   svc-server:
     docker:
       image: compose-test-svc-server:1
-      build: ./server
+      build:
+        context: ./server
     health:
       command: "true"
       interval_secs: 1
@@ -11,5 +12,6 @@ processes:
   svc-client:
     docker:
       image: compose-test-svc-client:1
-      build: ./client
+      build:
+        context: ./client
     depends_on: [svc-server]

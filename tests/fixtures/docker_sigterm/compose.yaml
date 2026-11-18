@@ -2,7 +2,8 @@ processes:
   sig-server:
     docker:
       image: compose-test-sig-server:1
-      build: ./server
+      build:
+        context: ./server
     health:
       command: "true"
       interval_secs: 1

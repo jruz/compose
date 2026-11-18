@@ -2,10 +2,11 @@ processes:
   postgres:
     docker:
       image: postgres:16-alpine
-      ports:
-        - "${PG_HOST_PORT}:5432"
-      volumes:
-        - "${PG_DATA}:/var/lib/postgresql/data"
+      run:
+        publish:
+          - "${PG_HOST_PORT}:5432"
+        volume:
+          - "${PG_DATA}:/var/lib/postgresql/data"
     env:
       PG_HOST_PORT: "5432"
       PG_USER: postgres
@@ -20,8 +21,9 @@ processes:
   redis:
     docker:
       image: redis:7-alpine
-      ports:
-        - "${REDIS_HOST_PORT}:6379"
+      run:
+        publish:
+          - "${REDIS_HOST_PORT}:6379"
     env:
       REDIS_HOST_PORT: "6379"
       REDIS_PORT: "6379"
@@ -33,8 +35,9 @@ processes:
   api:
     docker:
       image: nginx:alpine
-      ports:
-        - "${API_HOST_PORT}:80"
+      run:
+        publish:
+          - "${API_HOST_PORT}:80"
     env:
       API_HOST_PORT: "18080"
       API_MSG: compose-interpolation-works

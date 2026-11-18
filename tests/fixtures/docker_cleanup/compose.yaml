@@ -2,9 +2,11 @@ processes:
   cleanup-bg:
     docker:
       image: compose-test-cleanup-bg:1
-      build: ./worker
+      build:
+        context: ./worker
 
   cleanup-main:
     docker:
       image: compose-test-cleanup-main:1
-      build: ./main
+      build:
+        context: ./main

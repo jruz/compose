@@ -25,13 +25,13 @@ Config schema:
       exec: [<string>, ...]           # CMD override, exec form (docker only)
       docker:                         # container driver (alternative to command)
         image: <string>               # docker image (required if no build)
-        build: <string>               # build context path (required if no image)
-        build_args:                   # explicit --build-arg (default: resolved env)
-          KEY: \"VALUE\"
-        dockerfile: <string>          # dockerfile path (optional)
-        init: <bool>                  # forward signals and reap children via --init (opt-in)
-        ports: [<host:container>]     # port mappings
-        volumes: [<host:container>]   # volume mounts
+        build:                        # required if no image
+          context: <string>           # positional build context
+          file: <string>              # example: --file
+          build-arg: {KEY: \"VALUE\"}   # omit to forward resolved env; {} to disable
+        run:
+          publish: [<host:container>] # example: repeated --publish
+          init: <bool>                # example: --init=true or --init=false
         stop_timeout_secs: <int>      # seconds before force kill (default: 10)
       depends_on: [<string>, ...]     # processes that must be healthy first
       env_file: <string>              # optional path to KEY=VALUE file
@@ -45,9 +45,15 @@ Config schema:
 
 Variable interpolation:
 
-  All string values support ${VAR} interpolation from resolved env vars
-  (inline env, env_file, --env-file) and host environment.
-  Applies to: command, exec, ports, volumes, health.command, health.exec.
+  ${VAR} resolves from inline env, env_file, --env-file, then host environment.
+  Applies to command, exec, health commands, env values, image, build context,
+  and Docker build/run flag values. Keys are not interpolated.
+
+Docker flags:
+
+  Use long CLI flag names without leading dashes. A scalar becomes --flag=value;
+  lists repeat the flag. Maps for build-arg and label produce --flag=KEY=value.
+  Compose reserves flags that it manages for build output and container lifecycle.
   Undefined variables stay literal: ${UNKNOWN} remains ${UNKNOWN}."
 )]
 pub struct Cli {
