@@ -47,6 +47,13 @@ fn docker_build() {
 }
 
 #[test]
+fn docker_build_and_run_from_mixed_case_project_directory() {
+    let output = run_docker_fixture("docker_build.MixedCase", "run");
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "[build-main] build works");
+}
+
+#[test]
 fn docker_build_args() {
     let output = run_docker_fixture("docker_build_args", "run");
     assert_exit_code(&output, 0);

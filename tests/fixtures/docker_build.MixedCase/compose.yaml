@@ -1,0 +1,5 @@
+processes:
+  build-main:
+    docker:
+      build:
+        context: ../docker_build/app

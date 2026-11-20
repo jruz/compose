@@ -94,7 +94,7 @@ pub fn container_name(network: &str, process_name: &str) -> String {
 pub fn image_tag(network: &str, process_name: &str, image: Option<&str>) -> String {
     match image {
         Some(explicit) => explicit.to_string(),
-        None => format!("{network}-{process_name}"),
+        None => format!("{network}-{process_name}").to_ascii_lowercase(),
     }
 }
 
@@ -329,6 +329,15 @@ mod tests {
     use crate::config;
     use crate::docker;
     use crate::docker_flags;
+
+    #[test]
+    fn explicit_image_reference_preserves_tag_case() {
+        let image = "registry.example/app:ReleaseCandidate";
+        assert_eq!(
+            docker::image_tag("MixedCase-123", "build-main", Some(image)),
+            image
+        );
+    }
 
     #[test]
     fn init_flag_is_opt_in_for_both_runtimes() {
