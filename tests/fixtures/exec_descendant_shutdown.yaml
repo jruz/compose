@@ -1,4 +1,4 @@
-processes:
+services:
   wrapper:
     command: |
       trap 'exit 0' TERM

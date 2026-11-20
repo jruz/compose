@@ -1,4 +1,4 @@
-processes:
+services:
   svc-server:
     docker:
       image: compose-test-svc-server:1

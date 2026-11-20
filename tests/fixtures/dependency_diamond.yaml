@@ -1,4 +1,4 @@
-processes:
+services:
   infra:
     command: "echo infra-started && exec sleep 10"
 

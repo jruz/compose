@@ -1,4 +1,4 @@
-processes:
+services:
   bg:
     command: "sleep 30 & echo bg-started; wait"
     health:

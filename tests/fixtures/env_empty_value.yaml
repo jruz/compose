@@ -1,4 +1,4 @@
-processes:
+services:
   main:
     command: "echo OTHER=$OTHER && exit 0"
     env:

@@ -1,4 +1,4 @@
-processes:
+services:
   startup-service:
     docker:
       image: compose-test-interrupt-health:1

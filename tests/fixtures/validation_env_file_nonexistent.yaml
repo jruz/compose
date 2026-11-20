@@ -1,4 +1,4 @@
-processes:
+services:
   main:
     command: "echo hello"
     env_file: "/tmp/nonexistent_compose_env_98765.env"

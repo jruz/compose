@@ -1,4 +1,4 @@
-processes:
+services:
   build-bg:
     docker:
       image: compose-test-build-bg:1

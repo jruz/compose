@@ -1,4 +1,4 @@
-processes:
+services:
   svc:
     command: "echo hello && sleep 2"
     health:

@@ -1,4 +1,4 @@
-processes:
+services:
   base:
     type: oneshot
     command: "echo base-done"

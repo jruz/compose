@@ -1,4 +1,4 @@
-processes:
+services:
   service:
     command: "sleep 0.1 && exit 1"
     health:

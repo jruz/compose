@@ -1,4 +1,4 @@
-processes:
+services:
   broken:
     docker:
       image: alpine:3.21

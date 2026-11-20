@@ -1,4 +1,4 @@
-processes:
+services:
   cleanup-bg:
     docker:
       image: compose-test-cleanup-bg:1

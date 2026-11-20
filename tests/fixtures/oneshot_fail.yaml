@@ -1,4 +1,4 @@
-processes:
+services:
   init:
     type: oneshot
     command: "exit 1"

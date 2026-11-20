@@ -72,7 +72,7 @@ async fn remove_containers(
         .filter(|name| {
             let key = name.as_str();
             config
-                .processes
+                .services
                 .get(key)
                 .is_some_and(|proc| proc.docker.is_some())
         })

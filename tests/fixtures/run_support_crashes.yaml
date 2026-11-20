@@ -1,4 +1,4 @@
-processes:
+services:
   crasher:
     command: "exit 1"
 

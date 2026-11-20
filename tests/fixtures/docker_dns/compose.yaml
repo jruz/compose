@@ -1,4 +1,4 @@
-processes:
+services:
   dns-server:
     docker:
       image: compose-test-dns-server:1

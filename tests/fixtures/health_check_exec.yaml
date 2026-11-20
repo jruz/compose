@@ -1,4 +1,4 @@
-processes:
+services:
   service:
     command: "echo service-ready && exec sleep 10"
     health:

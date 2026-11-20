@@ -1,4 +1,4 @@
-processes:
+services:
   crash-worker:
     docker:
       image: compose-test-crash-worker:1

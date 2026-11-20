@@ -1,4 +1,4 @@
-processes:
+services:
   reset:
     type: oneshot
     command: "echo reset-done"

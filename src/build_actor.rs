@@ -31,7 +31,7 @@ pub async fn build(
     display_tx: &mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<(), Error> {
     for name in start_order {
-        let Some(proc_def) = config.processes.get(name) else {
+        let Some(proc_def) = config.services.get(name) else {
             continue;
         };
         let Some(docker_config) = &proc_def.docker else {

@@ -1,4 +1,4 @@
-processes:
+services:
   postgres:
     docker:
       image: postgres:16-alpine

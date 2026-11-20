@@ -1,4 +1,4 @@
-processes:
+services:
   wrapper:
     command: |
       sh -c '

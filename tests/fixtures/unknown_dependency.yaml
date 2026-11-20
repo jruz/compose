@@ -1,4 +1,4 @@
-processes:
+services:
   app:
     command: "echo hello"
     depends_on: [nonexistent]

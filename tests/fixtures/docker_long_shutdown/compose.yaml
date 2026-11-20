@@ -1,4 +1,4 @@
-processes:
+services:
   service:
     docker:
       image: alpine:3.21

@@ -1,4 +1,4 @@
-processes:
+services:
   main:
     command: "echo hello"
     env_file: "tests/fixtures/env_file_no_equals.env"

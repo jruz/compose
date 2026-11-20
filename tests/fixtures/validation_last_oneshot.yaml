@@ -1,4 +1,4 @@
-processes:
+services:
   db:
     command: "sleep 30"
     health:

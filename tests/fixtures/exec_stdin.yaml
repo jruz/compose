@@ -1,4 +1,4 @@
-processes:
+services:
   service:
     command: |
       if read -r line; then

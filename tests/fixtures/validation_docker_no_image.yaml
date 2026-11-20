@@ -1,4 +1,4 @@
-processes:
+services:
   api:
     docker:
       run:

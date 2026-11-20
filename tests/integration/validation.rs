@@ -150,6 +150,15 @@ fn unknown_yaml_field_rejected() {
 }
 
 #[test]
+fn legacy_processes_key_rejected() {
+    let output = run_fixture("validation_legacy_processes.yaml", "run");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(&output, "unknown field `processes`");
+    assert_stdout_contains(&output, "`services`");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("legacy-manifest-started"));
+}
+
+#[test]
 fn last_process_oneshot() {
     let output = run_fixture("validation_last_oneshot.yaml", "run");
     assert_ne!(output.status.code(), Some(0_i32));

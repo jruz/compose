@@ -1,4 +1,4 @@
-processes:
+services:
   api:
     comand: "echo hello"
     dependz_on: [redis]

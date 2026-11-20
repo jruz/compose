@@ -1,4 +1,4 @@
-processes:
+services:
   main:
     command: "echo $DATABASE_URL && exit 0"
     env:

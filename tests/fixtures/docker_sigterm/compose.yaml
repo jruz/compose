@@ -1,4 +1,4 @@
-processes:
+services:
   sig-server:
     docker:
       image: compose-test-sig-server:1

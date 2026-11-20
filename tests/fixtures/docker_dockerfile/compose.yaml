@@ -1,4 +1,4 @@
-processes:
+services:
   custom-df:
     docker:
       image: compose-test-custom-df:1

@@ -1,4 +1,4 @@
-processes:
+services:
   postgres:
     command: bun run examples/services/postgres.ts
     health:

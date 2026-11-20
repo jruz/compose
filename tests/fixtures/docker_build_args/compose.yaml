@@ -1,4 +1,4 @@
-processes:
+services:
   implicit:
     type: oneshot
     docker:

@@ -1,4 +1,4 @@
-processes:
+services:
   a:
     command: "echo a-started && exit 0"
     depends_on: [b]

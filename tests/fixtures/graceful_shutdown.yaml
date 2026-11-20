@@ -1,4 +1,4 @@
-processes:
+services:
   trapper:
     command: "trap 'echo sigterm-received; exit 0' TERM; echo trapper-started; while true; do sleep 0.1; done"
 

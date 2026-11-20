@@ -1,4 +1,4 @@
-processes:
+services:
   alpha:
     command: "echo alpha"
     depends_on: [beta]

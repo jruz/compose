@@ -1,4 +1,4 @@
-processes:
+services:
   hc-service:
     docker:
       image: compose-test-hc-service:1

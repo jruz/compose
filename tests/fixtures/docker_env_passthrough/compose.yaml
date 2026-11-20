@@ -1,4 +1,4 @@
-processes:
+services:
   passthrough:
     docker:
       image: compose-test-passthrough:1

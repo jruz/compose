@@ -77,13 +77,13 @@ enum ServiceOutcome {
 pub fn resolve_start_order(config: &config::Config) -> Vec<String> {
     let mut order: Vec<String> = Vec::new();
     let mut resolved: HashSet<&str> = HashSet::new();
-    let mut remaining: Vec<&str> = config.processes.keys().map(String::as_str).collect();
+    let mut remaining: Vec<&str> = config.services.keys().map(String::as_str).collect();
 
     while !remaining.is_empty() {
         let mut progress = false;
 
         remaining.retain(|&name| {
-            let Some(proc_def) = config.processes.get(name) else {
+            let Some(proc_def) = config.services.get(name) else {
                 return false;
             };
             let all_deps_resolved = proc_def.depends_on.iter().all(|dep| {
@@ -125,7 +125,7 @@ pub async fn start_all(
     };
     for name in start_order {
         let proc_def = config
-            .processes
+            .services
             .get(name)
             .ok_or_else(|| Error::ProcessNotFound { name: name.clone() })?;
 

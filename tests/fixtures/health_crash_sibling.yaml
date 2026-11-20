@@ -1,4 +1,4 @@
-processes:
+services:
   a-worker:
     command: "sleep 60"
 

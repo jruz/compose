@@ -51,7 +51,7 @@ compose run --config compose.yaml
 Example config — run a migration with a database:
 
 ```yaml
-processes:
+services:
   db:
     command: "postgres -D /tmp/pgdata"
     health:
@@ -76,7 +76,7 @@ compose up --config compose.yaml
 Example config — run a web app with a background worker:
 
 ```yaml
-processes:
+services:
   redis:
     command: "redis-server"
     health:
@@ -113,7 +113,7 @@ compose up --config compose.yaml
 Example config — postgres, redis, and nginx with `${VAR}` interpolation:
 
 ```yaml
-processes:
+services:
   postgres:
     docker:
       image: postgres:16-alpine
@@ -157,7 +157,7 @@ compose up --config compose.yaml --env-file <(sops --decrypt secrets.env)
 Build from a Dockerfile instead of pulling an image:
 
 ```yaml
-processes:
+services:
   app:
     docker:
       build:
@@ -174,7 +174,7 @@ processes:
 Pass explicit build args to `docker build`:
 
 ```yaml
-processes:
+services:
   app:
     docker:
       build:
@@ -197,7 +197,7 @@ To migrate older configs, move `build` into `build.context`, `dockerfile` into `
 Inline per-process:
 
 ```yaml
-processes:
+services:
   app:
     command: "node server.js"
     env:
@@ -220,7 +220,7 @@ compose run --config compose.yaml --env-file <(sops --decrypt secrets.env)
 Variable interpolation with `${VAR}` uses resolved env vars and host environment:
 
 ```yaml
-processes:
+services:
   app:
     docker:
       build:
@@ -245,10 +245,12 @@ Precedence: inline env > process env file > global env file > host environment.
 
 ## Config schema
 
+Use `services` for host processes, containers, and one-shot tasks.
+
 ```yaml
 runtime: <docker|podman> # container runtime (default: docker)
 shell: <string> # shell for exec processes (default: sh)
-processes:
+services:
   <name>:
     type: <service|oneshot> # process type (default: service)
     command: <string> # shell command (exec) or container CMD override (docker), supports ${VAR}
@@ -280,7 +282,7 @@ processes:
 Example config — database with migrations and seeding before server:
 
 ```yaml
-processes:
+services:
   db:
     command: "postgres -D /tmp/pgdata"
     health:

@@ -1,4 +1,4 @@
-processes:
+services:
   service:
     command: '(sleep 2 && touch "${MARKER}") & echo service-started && exec sleep 10'
     env:

@@ -1,4 +1,4 @@
-processes:
+services:
   empty-env-main:
     docker:
       image: compose-test-empty-env-main:1

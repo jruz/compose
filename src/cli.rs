@@ -18,8 +18,8 @@ Config schema:
 
   runtime: <docker|podman>            # container runtime (default: docker)
   shell: <string>                     # shell for exec processes (default: sh)
-  processes:
-    <name>:                           # unique process name
+  services:
+    <name>:                           # unique host, container, or oneshot service name
       type: <service|oneshot>         # process type (default: service)
       command: <string>               # shell command (exec) or CMD override (docker)
       exec: [<string>, ...]           # CMD override, exec form (docker only)

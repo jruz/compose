@@ -1,4 +1,4 @@
-processes:
+services:
   db:
     command: "sh -c 'echo db-child-running >> /dev/stderr & echo db-ready; sleep 30'"
     health:

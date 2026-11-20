@@ -388,7 +388,7 @@ fn docker_volumes() -> Result<(), Error> {
         docker_volume_populate(vol, "file.txt", "volume-content-here\n")?;
         let dir = fixture_path("docker_volumes");
         let compose_content = format!(
-            "processes:\n  vol-main:\n    docker:\n      image: compose-test-vol-main\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"{vol}:/mnt/data\"\n"
+            "services:\n  vol-main:\n    docker:\n      image: compose-test-vol-main\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"{vol}:/mnt/data\"\n"
         );
         let compose_path = dir.join("compose.yaml");
         std::fs::write(compose_path, compose_content)?;
@@ -409,7 +409,7 @@ fn docker_volume_expansion_from_host_env() -> Result<(), Error> {
     let output = with_docker_volume("compose-test-vol-host", |vol| {
         docker_volume_populate(vol, "file.txt", "expanded-host-var\n")?;
         let dir = fixture_path("docker_volume_expansion");
-        let compose_content = "processes:\n  vol-host:\n    docker:\n      image: compose-test-vol-host\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"${VOLUME_HOST_DIR}:/mnt/data\"\n";
+        let compose_content = "services:\n  vol-host:\n    docker:\n      image: compose-test-vol-host\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"${VOLUME_HOST_DIR}:/mnt/data\"\n";
         let compose_path = dir.join("compose_host.yaml");
         std::fs::write(&compose_path, compose_content)?;
         let bin = binary_path();
@@ -432,7 +432,7 @@ fn docker_volume_expansion_from_process_env() -> Result<(), Error> {
         docker_volume_populate(vol, "file.txt", "expanded-process-var\n")?;
         let dir = fixture_path("docker_volume_expansion");
         let compose_content = format!(
-            "processes:\n  vol-proc:\n    docker:\n      image: compose-test-vol-proc\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"${{DATA_PATH}}:/mnt/data\"\n    env:\n      DATA_PATH: \"{vol}\"\n"
+            "services:\n  vol-proc:\n    docker:\n      image: compose-test-vol-proc\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"${{DATA_PATH}}:/mnt/data\"\n    env:\n      DATA_PATH: \"{vol}\"\n"
         );
         let compose_path = dir.join("compose_proc.yaml");
         std::fs::write(&compose_path, compose_content)?;
@@ -527,7 +527,7 @@ fn check_docker_volume_removed(volume: &str) -> Result<(), Error> {
 #[test]
 fn docker_volume_expansion_undefined_stays_literal() {
     let dir = fixture_path("docker_volume_expansion");
-    let compose_content = "processes:\n  vol-undef:\n    docker:\n      image: compose-test-vol-undef\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"${UNDEFINED_VAR_XYZZY}:/mnt/data\"\n";
+    let compose_content = "services:\n  vol-undef:\n    docker:\n      image: compose-test-vol-undef\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"${UNDEFINED_VAR_XYZZY}:/mnt/data\"\n";
     let compose_path = dir.join("compose_undef.yaml");
     match std::fs::write(compose_path, compose_content) {
         Ok(()) => {}

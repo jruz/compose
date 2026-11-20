@@ -1,0 +1,3 @@
+processes:
+  task:
+    command: echo legacy-manifest-started

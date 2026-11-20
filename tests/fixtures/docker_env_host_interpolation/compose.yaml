@@ -1,4 +1,4 @@
-processes:
+services:
   host-env-main:
     docker:
       image: compose-test-host-env-main:1

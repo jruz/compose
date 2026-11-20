@@ -1,4 +1,4 @@
-processes:
+services:
   echo-cmd:
     docker:
       image: compose-test-echo-cmd:1

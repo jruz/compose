@@ -67,7 +67,7 @@ pub async fn run(
     project_name: String,
     log_tx: mpsc::UnboundedSender<String>,
 ) -> Result<message::ExitResult, Error> {
-    let has_docker = config.processes.values().any(|proc| proc.docker.is_some());
+    let has_docker = config.services.values().any(|proc| proc.docker.is_some());
     let binary = config::runtime_binary(&config.runtime);
     let names = display_names(&config, has_docker, binary);
 
@@ -178,7 +178,7 @@ async fn run_until_shutdown(
 }
 
 fn display_names(config: &config::Config, has_docker: bool, runtime_label: &str) -> Vec<String> {
-    let mut names: Vec<String> = config.processes.keys().cloned().collect();
+    let mut names: Vec<String> = config.services.keys().cloned().collect();
     if has_docker {
         let label = runtime_label.to_string();
         names.push(label);
@@ -234,7 +234,7 @@ fn check_main_not_oneshot(
     config: &config::Config,
 ) -> Result<(), Error> {
     let is_oneshot = matches!(shutdown, lifecycle::ShutdownStrategy::MainProcess(name)
-        if config.processes.get(name).is_some_and(|proc| proc.process_type == config::ProcessType::Oneshot)
+        if config.services.get(name).is_some_and(|proc| proc.process_type == config::ProcessType::Oneshot)
     );
     if let (true, lifecycle::ShutdownStrategy::MainProcess(name)) = (is_oneshot, shutdown) {
         let err: Error = config::Error::LastProcessOneshot { name: name.clone() }.into();

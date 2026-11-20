@@ -65,9 +65,9 @@ pub enum Error {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    pub processes: IndexMap<String, ProcessDef>,
     #[serde(default)]
     pub runtime: Runtime,
+    pub services: IndexMap<String, ProcessDef>,
     pub shell: Option<String>,
 }
 
@@ -177,11 +177,11 @@ pub fn parse_env_file(path: &Path) -> Result<BTreeMap<String, String>, Error> {
 }
 
 fn validate(config: &Config) -> Result<(), Error> {
-    if config.processes.is_empty() {
+    if config.services.is_empty() {
         return Err(Error::NoProcesses);
     }
 
-    for (name, proc_def) in &config.processes {
+    for (name, proc_def) in &config.services {
         check_driver(name, proc_def)?;
         check_health(name, proc_def)?;
     }
@@ -194,7 +194,7 @@ fn validate(config: &Config) -> Result<(), Error> {
 
 fn check_circular_dependencies(config: &Config) -> Result<(), Error> {
     let adj: HashMap<&str, Vec<&str>> = config
-        .processes
+        .services
         .iter()
         .map(|(name, proc_def)| {
             (
@@ -208,7 +208,7 @@ fn check_circular_dependencies(config: &Config) -> Result<(), Error> {
     let mut in_stack = HashSet::new();
     let mut path: Vec<&str> = Vec::new();
 
-    for name in config.processes.keys() {
+    for name in config.services.keys() {
         let name_str = name.as_str();
         if !visited.contains(name_str) {
             detect_cycle(name_str, &adj, &mut visited, &mut in_stack, &mut path)?;
@@ -270,8 +270,8 @@ fn check_health_fields(name: &str, health: &HealthCheck) -> Result<(), Error> {
 }
 
 fn check_unknown_dependencies(config: &Config) -> Result<(), Error> {
-    let names: HashSet<&str> = config.processes.keys().map(String::as_str).collect();
-    for (name, proc_def) in &config.processes {
+    let names: HashSet<&str> = config.services.keys().map(String::as_str).collect();
+    for (name, proc_def) in &config.services {
         for dep in &proc_def.depends_on {
             let dep_str = dep.as_str();
             if !names.contains(dep_str) {

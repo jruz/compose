@@ -1,4 +1,4 @@
-processes:
+services:
   stubborn:
     command: "trap '' TERM && echo stubborn-started && exec sleep 30"
 

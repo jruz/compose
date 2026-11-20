@@ -1,4 +1,4 @@
-processes:
+services:
   main:
     command: "echo RESULT=$MY_COMPOSED_VAR && exit 0"
     env:

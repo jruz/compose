@@ -1,4 +1,4 @@
-processes:
+services:
   main:
     command: "echo A=$A B=$B C=$C && exit 0"
     env:

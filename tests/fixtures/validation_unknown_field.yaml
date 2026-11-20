@@ -1,4 +1,4 @@
-processes:
+services:
   main:
     command: "echo hello"
     bogus_field: "should fail"

@@ -1,4 +1,4 @@
-processes:
+services:
   short:
     command: "sleep 0.1 && exit 0"
 

@@ -1,4 +1,4 @@
-processes:
+services:
   service:
     command: "trap 'echo sigterm-on-timeout; exit 1' TERM; echo service-started; while true; do sleep 0.1; done"
     health:
