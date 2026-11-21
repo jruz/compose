@@ -1,0 +1,6 @@
+services:
+  web:
+    docker:
+      build:
+        context: .
+        file: Dockerfile.custom

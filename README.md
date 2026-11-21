@@ -162,7 +162,7 @@ services:
     docker:
       build:
         context: ./app
-        file: Dockerfile.dev
+        dockerfile: Dockerfile.dev
       run:
         init: true
         publish:
@@ -190,7 +190,7 @@ Use Docker or Podman long flag names without `--`. Scalars become `--flag=value`
 
 Compose reserves build `tag`, `progress`, and `help`, and run `attach`, `detach`, `help`, `log-driver`, `name`, `net`, `network`, `network-alias`, `restart`, `rm`, and `stop-timeout`. Use `docker.stop_timeout_secs` for shutdown timing.
 
-To migrate older configs, move `build` into `build.context`, `dockerfile` into `build.file`, `build_args` into `build.build-arg`, and `init`, `ports`, and `volumes` into `run.init`, `run.publish`, and `run.volume`.
+`docker.build.dockerfile` passes the Dockerfile path to `--file`. `docker.run` contains extra CLI flags; `image` and `stop_timeout_secs` stay directly under `docker`.
 
 ### Environment variables
 
@@ -238,7 +238,7 @@ services:
       timeout_secs: 10
 ```
 
-Applies to: `command`, `exec`, `docker.image`, `docker.build.context`, build and run flag values, `health.command`, `health.exec`, and `env` values.
+Applies to: `command`, `exec`, `docker.image`, `docker.build.context`, `docker.build.dockerfile`, build and run flag values, `health.command`, `health.exec`, and `env` values.
 Undefined variables stay literal: `${UNKNOWN}` remains `${UNKNOWN}`.
 
 Precedence: inline env > process env file > global env file > host environment.
@@ -259,6 +259,7 @@ services:
       image: <string> # docker image (required if no build)
       build: # required if no image
         context: <string> # build context path
+        dockerfile: <string> # optional Dockerfile path passed to --file
         <flag>: <value> # Docker or Podman build flag
       run:
         <flag>: <value> # Docker or Podman run flag

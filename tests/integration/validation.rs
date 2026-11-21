@@ -150,6 +150,13 @@ fn unknown_yaml_field_rejected() {
 }
 
 #[test]
+fn legacy_build_file_key_rejected() {
+    let output = run_fixture("validation_legacy_build_file.yaml", "run");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(&output, "docker.build.file: flag is managed by Compose");
+}
+
+#[test]
 fn legacy_processes_key_rejected() {
     let output = run_fixture("validation_legacy_processes.yaml", "run");
     assert_exit_code(&output, 1);

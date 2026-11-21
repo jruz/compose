@@ -21,7 +21,7 @@ services:
       image: "${IMAGE_NAME}:1"
       build:
         context: "${BUILD_CONTEXT}"
-        file: "${BUILD_FILE}"
+        dockerfile: "${BUILD_FILE}"
         build-arg:
           GREETING: "${MESSAGE}"
       run:

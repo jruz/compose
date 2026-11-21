@@ -4,4 +4,4 @@ services:
       image: compose-test-custom-df:1
       build:
         context: .
-        file: Dockerfile.custom
+        dockerfile: Dockerfile.custom

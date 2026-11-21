@@ -22,6 +22,7 @@ pub enum Error {
 #[derive(Debug, serde::Deserialize)]
 pub struct Build {
     pub context: String,
+    pub dockerfile: Option<String>,
     #[serde(flatten)]
     pub flags: Flags,
 }
@@ -46,7 +47,7 @@ pub enum Scalar {
 
 pub fn validate(docker: &config::DockerConfig) -> Result<(), Error> {
     if let Some(build) = &docker.build {
-        validate_flags("build", &build.flags, &["tag", "progress", "help"])?;
+        validate_flags("build", &build.flags, &["file", "tag", "progress", "help"])?;
     }
     validate_flags(
         "run",
@@ -103,9 +104,13 @@ fn supports_map(section: &str, flag: &str) -> bool {
     flag == "label" || (section == "build" && flag == "build-arg")
 }
 
-pub fn build_args(flags: &Flags, env: &BTreeMap<String, String>) -> Vec<String> {
-    let mut args = args(flags, env);
-    if !flags.contains_key("build-arg") {
+pub fn build_args(build: &Build, env: &BTreeMap<String, String>) -> Vec<String> {
+    let mut args = args(&build.flags, env);
+    if let Some(dockerfile) = &build.dockerfile {
+        let path = env::expand_vars(dockerfile, env);
+        args.push(format!("--file={path}"));
+    }
+    if !build.flags.contains_key("build-arg") {
         let forwarded = env
             .iter()
             .map(|(key, value)| format!("--build-arg={key}={value}"));

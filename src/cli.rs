@@ -27,9 +27,9 @@ Config schema:
         image: <string>               # docker image (required if no build)
         build:                        # required if no image
           context: <string>           # positional build context
-          file: <string>              # example: --file
+          dockerfile: <string>        # optional Dockerfile path passed to --file
           build-arg: {KEY: \"VALUE\"}   # omit to forward resolved env; {} to disable
-        run:
+        run:                          # extra docker run or podman run flags
           publish: [<host:container>] # example: repeated --publish
           init: <bool>                # example: --init=true or --init=false
         stop_timeout_secs: <int>      # seconds before force kill (default: 10)

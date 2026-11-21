@@ -53,7 +53,7 @@ pub async fn build(
         let image_ref = image.as_deref();
         let tag = docker::image_tag(network, name, image_ref);
         let build_context = env::expand_vars(&build.context, &env);
-        let args = crate::docker_flags::build_args(&build.flags, &env);
+        let args = crate::docker_flags::build_args(build, &env);
         let mut build_cmd = docker::build_command(binary, &tag, &build_context, &args);
         let mut child =
             process::spawn_child(&mut build_cmd).map_err(|source| docker::Error::Build {
