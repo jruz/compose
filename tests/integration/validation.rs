@@ -60,10 +60,12 @@ fn docker_reserved_flag() {
 }
 
 #[test]
-fn docker_both_command_exec() {
-    let output = run_fixture("validation_docker_both_command_exec.yaml", "run");
-    assert_ne!(output.status.code(), Some(0_i32));
-    assert_stdout_contains(&output, "cannot have both command and exec");
+fn legacy_exec_key_rejected() {
+    let output = run_fixture("validation_legacy_exec.yaml", "run");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(&output, "unknown field `exec`");
+    assert_stdout_contains(&output, "`command`");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("legacy-manifest-started"));
 }
 
 #[test]

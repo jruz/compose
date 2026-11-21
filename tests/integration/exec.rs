@@ -8,6 +8,14 @@ fn run_main_exits_zero() {
 }
 
 #[test]
+fn host_command_list_preserves_arguments() {
+    let output = run_fixture("host_command_list.yaml", "run");
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "[main] <two words>\n");
+    assert_stdout_contains(&output, "[main] <; $HOME * | >\n");
+}
+
+#[test]
 fn run_main_exits_nonzero() {
     let output = run_fixture("run_exit_nonzero.yaml", "run");
     assert_exit_code(&output, 42);

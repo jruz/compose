@@ -30,7 +30,7 @@ services:
         tmpfs:
           - "${WORKDIR}"
           - /second
-    exec: ["sh", "-ec", "touch write-check /second/write-check; pwd; cat /greeting.txt"]
+    command: ["sh", "-ec", "touch write-check /second/write-check; pwd; cat /greeting.txt"]
     environment:
       BUILD_CONTEXT: ./app
       BUILD_FILE: app/Dockerfile

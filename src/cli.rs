@@ -21,8 +21,8 @@ Config schema:
   services:
     <name>:                           # unique host, container, or oneshot service name
       type: <service|oneshot>         # process type (default: service)
-      command: <string>               # shell command (exec) or CMD override (docker)
-      exec: [<string>, ...]           # CMD override, exec form (docker only)
+      command: <string|list>          # host strings use shell; container strings split on whitespace
+                                      # lists pass arguments directly on either runtime
       docker:                         # container driver (alternative to command)
         image: <string>               # docker image (required if no build)
         build:                        # required if no image
@@ -46,8 +46,8 @@ Config schema:
 Variable interpolation:
 
   ${VAR} resolves from environment, env_file, --env-file, then host environment.
-  Applies to command, exec, health commands, environment values, image, build context,
-  and Docker build/run flag values. Keys are not interpolated.
+  Applies to command strings and each list item, health commands, environment values,
+  image, build context, and Docker build/run flag values. Keys are not interpolated.
 
 Docker flags:
 

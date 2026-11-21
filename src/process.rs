@@ -4,10 +4,14 @@ use std::os::unix::process::CommandExt as _;
 use tokio::sync::mpsc;
 
 use crate::actor;
+use crate::config;
 use crate::message;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("{name}: host command list requires an executable")]
+    MissingExecutable { name: String },
+
     #[error("spawned process has no PID")]
     MissingPid,
 
@@ -23,23 +27,17 @@ pub enum Error {
 
 pub fn spawn_actor(
     name: &str,
-    command: &str,
+    command: &config::Command,
     shell: &str,
     env: &BTreeMap<String, String>,
     event_tx: mpsc::UnboundedSender<message::ActorExited>,
     display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<message::ActorHandle, Error> {
-    let mut std_cmd = std::process::Command::new(shell);
+    let mut std_cmd = host_command(name, command, shell)?;
     let piped_out = std::process::Stdio::piped();
     let piped_err = std::process::Stdio::piped();
     let stdin = std::process::Stdio::null();
-    std_cmd
-        .arg("-c")
-        .arg(command)
-        .stdin(stdin)
-        .stdout(piped_out)
-        .stderr(piped_err)
-        .process_group(0);
+    std_cmd.stdin(stdin).stdout(piped_out).stderr(piped_err);
 
     for (key, value) in env {
         std_cmd.env(key, value);
@@ -70,6 +68,32 @@ pub fn spawn_actor(
         join: handle,
         name: name.to_string(),
     })
+}
+
+fn host_command(
+    name: &str,
+    command: &config::Command,
+    shell: &str,
+) -> Result<std::process::Command, Error> {
+    let mut cmd = match command {
+        config::Command::String(script) => {
+            let mut cmd = std::process::Command::new(shell);
+            cmd.arg("-c").arg(script);
+            cmd
+        }
+        config::Command::List(args) => {
+            let Some((program, args)) = args.split_first() else {
+                return Err(Error::MissingExecutable {
+                    name: name.to_string(),
+                });
+            };
+            let mut cmd = std::process::Command::new(program);
+            cmd.args(args);
+            cmd
+        }
+    };
+    cmd.process_group(0);
+    Ok(cmd)
 }
 
 pub fn spawn_child(

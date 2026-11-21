@@ -576,10 +576,11 @@ fn docker_command() {
 }
 
 #[test]
-fn docker_exec() {
+fn docker_command_list_preserves_arguments() {
     let output = run_docker_fixture("docker_exec", "run");
     assert_exit_code(&output, 0);
-    assert_stdout_contains(&output, "hello from exec");
+    assert_stdout_contains(&output, "[echo-exec] <two words>\n");
+    assert_stdout_contains(&output, "[echo-exec] <; $HOME * | >\n");
 }
 
 #[test]

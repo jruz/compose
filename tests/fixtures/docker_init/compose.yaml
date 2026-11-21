@@ -5,7 +5,7 @@ services:
       image: alpine:3.21
       run:
         init: true
-    exec: ["sh", "-c", "test \"$$\" -ne 1 && echo init-enabled"]
+    command: ["sh", "-c", "test \"$$\" -ne 1 && echo init-enabled"]
 
   disabled:
     type: oneshot
@@ -14,10 +14,10 @@ services:
       image: alpine:3.21
       run:
         init: false
-    exec: ["sh", "-c", "test \"$$\" -eq 1 && echo init-disabled"]
+    command: ["sh", "-c", "test \"$$\" -eq 1 && echo init-disabled"]
 
   omitted:
     depends_on: [disabled]
     docker:
       image: alpine:3.21
-    exec: ["sh", "-c", "test \"$$\" -eq 1 && echo init-omitted"]
+    command: ["sh", "-c", "test \"$$\" -eq 1 && echo init-omitted"]

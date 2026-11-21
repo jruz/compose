@@ -5,7 +5,7 @@ services:
       run:
         init: true
       stop_timeout_secs: 20
-    exec:
+    command:
       - sh
       - -c
       - |

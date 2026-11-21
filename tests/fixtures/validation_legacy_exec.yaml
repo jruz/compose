@@ -1,0 +1,4 @@
+services:
+  main:
+    command: echo legacy-manifest-started
+    exec: [echo, legacy-manifest-started]

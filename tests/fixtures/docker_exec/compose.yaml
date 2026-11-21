@@ -4,4 +4,6 @@ services:
       image: compose-test-echo-exec:1
       build:
         context: .
-    exec: ["echo", "hello from exec"]
+    command: [printf, '%s\n', '<${PHRASE}>', '<; $HOME * | >']
+    environment:
+      PHRASE: two words

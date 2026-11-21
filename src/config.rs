@@ -9,9 +9,6 @@ pub enum Error {
     #[error("circular dependency detected: {0}")]
     CircularDependency(String),
 
-    #[error("{name}: docker process cannot have both command and exec")]
-    DockerBothCommandAndExec { name: String },
-
     #[error("{name}: {source}")]
     DockerFlags {
         name: String,
@@ -101,17 +98,23 @@ pub struct HealthCheck {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProcessDef {
-    pub command: Option<String>,
+    pub command: Option<Command>,
     #[serde(default)]
     pub depends_on: Vec<String>,
     pub docker: Option<DockerConfig>,
     pub env_file: Option<String>,
     #[serde(default)]
     pub environment: BTreeMap<String, String>,
-    pub exec: Option<Vec<String>>,
     pub health: Option<HealthCheck>,
     #[serde(rename = "type", default = "default_process_type")]
     pub process_type: ProcessType,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum Command {
+    List(Vec<String>),
+    String(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -222,11 +225,6 @@ fn check_driver(name: &str, proc_def: &ProcessDef) -> Result<(), Error> {
     match &proc_def.docker {
         Some(docker) if docker.image.is_none() && docker.build.is_none() => {
             Err(Error::DockerNoImageOrBuild {
-                name: name.to_string(),
-            })
-        }
-        Some(_) if proc_def.command.is_some() && proc_def.exec.is_some() => {
-            Err(Error::DockerBothCommandAndExec {
                 name: name.to_string(),
             })
         }

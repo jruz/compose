@@ -20,9 +20,8 @@ pub enum Error {
 
 pub struct RunConfig<'cfg> {
     pub binary: &'cfg str,
-    pub command: Option<&'cfg str>,
+    pub command: Option<&'cfg crate::config::Command>,
     pub env: &'cfg BTreeMap<String, String>,
-    pub exec: Option<&'cfg [String]>,
     pub flags: &'cfg [String],
     pub image: &'cfg str,
     pub name: &'cfg str,
@@ -40,7 +39,6 @@ pub fn spawn_actor(
         command: run.command,
         container_name: &container,
         env: run.env,
-        exec: run.exec,
         image: run.image,
         flags: run.flags,
         network: run.network,

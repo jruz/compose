@@ -95,6 +95,22 @@ services:
     depends_on: [redis]
 ```
 
+### Commands
+
+A host `command` string runs through the configured shell. A container `command` string is split on whitespace and passed as a CMD override without a shell.
+
+Use a list to pass exact arguments on either runtime:
+
+```yaml
+services:
+  greet:
+    command: [printf, '%s\n', "${GREETING}"]
+    environment:
+      GREETING: hello world
+```
+
+Compose expands `${VAR}` in each list item without splitting it or interpreting shell syntax. Containers without a `command` use the image's default command.
+
 ### Container mode
 
 Instead of running shell commands, processes can run as containers via docker or podman.
@@ -238,7 +254,7 @@ services:
       timeout_secs: 10
 ```
 
-Applies to: `command`, `exec`, `docker.image`, `docker.build.context`, `docker.build.dockerfile`, build and run flag values, `health.command`, `health.exec`, and `environment` values.
+Applies to: `command` strings and list items, `docker.image`, `docker.build.context`, `docker.build.dockerfile`, build and run flag values, `health.command`, `health.exec`, and `environment` values.
 Undefined variables stay literal: `${UNKNOWN}` remains `${UNKNOWN}`.
 
 Precedence: service `environment` > service `env_file` > CLI `--env-file` > launching environment.
@@ -253,8 +269,7 @@ shell: <string> # shell for exec processes (default: sh)
 services:
   <name>:
     type: <service|oneshot> # process type (default: service)
-    command: <string> # shell command (exec) or container CMD override (docker), supports ${VAR}
-    exec: [<string>, ...] # container CMD override, exec form (docker only), supports ${VAR}
+    command: <string|list> # host shell command or container CMD override; lists pass arguments directly
     docker: # presence of this section makes it a docker process
       image: <string> # docker image (required if no build)
       build: # required if no image

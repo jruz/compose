@@ -129,16 +129,11 @@ pub async fn start_all(
             .get(name)
             .ok_or_else(|| Error::ProcessNotFound { name: name.clone() })?;
 
-        let is_docker = proc_def.docker.is_some();
         let is_oneshot = proc_def.process_type == config::ProcessType::Oneshot;
-
-        if !is_docker && proc_def.command.is_none() {
-            continue;
-        }
-
         let start_label = match (&proc_def.command, &proc_def.docker) {
-            (Some(cmd), _) => cmd.clone(),
-            (None, Some(_)) => format!("{}:{name}", channels.binary),
+            (Some(config::Command::String(cmd)), _) => cmd.clone(),
+            (_, Some(_)) => format!("{}:{name}", channels.binary),
+            (Some(config::Command::List(_)), None) => "command list".to_string(),
             (None, None) => continue,
         };
 
@@ -389,6 +384,19 @@ fn expand_health(
     }
 }
 
+fn expand_command(command: &config::Command, env: &BTreeMap<String, String>) -> config::Command {
+    match command {
+        config::Command::String(script) => {
+            let script = env::expand_vars(script, env);
+            config::Command::String(script)
+        }
+        config::Command::List(args) => {
+            let args = args.iter().map(|arg| env::expand_vars(arg, env)).collect();
+            config::Command::List(args)
+        }
+    }
+}
+
 fn spawn_process_actor(
     name: &str,
     proc_def: &config::ProcessDef,
@@ -400,11 +408,7 @@ fn spawn_process_actor(
     let expanded_command = proc_def
         .command
         .as_ref()
-        .map(|cmd| env::expand_vars(cmd, env));
-    let expanded_exec: Option<Vec<String>> = proc_def
-        .exec
-        .as_ref()
-        .map(|args| args.iter().map(|arg| env::expand_vars(arg, env)).collect());
+        .map(|command| expand_command(command, env));
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
         let image_ref = docker_config
             .image
@@ -415,9 +419,8 @@ fn spawn_process_actor(
         let flags = crate::docker_flags::args(&docker_config.run, env);
         let run_config = docker_actor::RunConfig {
             binary: channels.binary,
-            command: expanded_command.as_deref(),
+            command: expanded_command.as_ref(),
             env,
-            exec: expanded_exec.as_deref(),
             image: &image,
             flags: &flags,
             name,

@@ -77,10 +77,9 @@ pub enum Error {
 }
 
 pub struct RunConfig<'cfg> {
-    pub command: Option<&'cfg str>,
+    pub command: Option<&'cfg crate::config::Command>,
     pub container_name: &'cfg str,
     pub env: &'cfg BTreeMap<String, String>,
-    pub exec: Option<&'cfg [String]>,
     pub flags: &'cfg [String],
     pub image: &'cfg str,
     pub network: &'cfg str,
@@ -132,18 +131,15 @@ pub fn run_command(binary: &str, run: &RunConfig<'_>) -> std::process::Command {
 
     cmd.args(run.flags).arg("--").arg(run.image);
 
-    match (run.command, run.exec) {
-        (Some(shell_cmd), _) => {
-            for arg in shell_cmd.split_whitespace() {
-                cmd.arg(arg);
-            }
+    match run.command {
+        Some(crate::config::Command::String(command)) => {
+            let args = command.split_whitespace();
+            cmd.args(args);
         }
-        (_, Some(args)) => {
-            for arg in args {
-                cmd.arg(arg);
-            }
+        Some(crate::config::Command::List(args)) => {
+            cmd.args(args);
         }
-        (None, None) => {}
+        None => {}
     }
 
     let piped_out = std::process::Stdio::piped();
@@ -358,7 +354,6 @@ mod tests {
                     command: None,
                     container_name: "test-service",
                     env: &env,
-                    exec: None,
                     image: "alpine:3.21",
                     flags: &flags,
                     network: "test-network",
