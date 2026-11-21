@@ -1,7 +1,7 @@
 services:
   main:
     command: "echo $DATABASE_URL && exit 0"
-    env:
+    environment:
       DB_USER: admin
       DB_PASS: secret
       DB_HOST: db

@@ -1,7 +1,7 @@
 services:
   service:
     command: 'touch "${MARKER}" && exec sleep 10'
-    env:
+    environment:
       MARKER: "${COMPOSE_TEST_MARKER}"
     health:
       command: 'test -f "${MARKER}"'

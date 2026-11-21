@@ -4,7 +4,7 @@ services:
     docker:
       build:
         context: ./app
-    env:
+    environment:
       GREETING: implicit-from-env
   empty:
     type: oneshot
@@ -13,7 +13,7 @@ services:
       build:
         context: ./app
         args: {}
-    env:
+    environment:
       GREETING: not-forwarded
   build-args-main:
     depends_on: [empty]
@@ -31,7 +31,7 @@ services:
           - "${WORKDIR}"
           - /second
     exec: ["sh", "-ec", "touch write-check /second/write-check; pwd; cat /greeting.txt"]
-    env:
+    environment:
       BUILD_CONTEXT: ./app
       BUILD_FILE: app/Dockerfile
       GREETING: overridden

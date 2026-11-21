@@ -1,7 +1,7 @@
 services:
   service:
     command: "exec sleep 10"
-    env:
+    environment:
       CHECK_DIR: /tmp
     health:
       exec: ["test", "-d", "${CHECK_DIR}"]

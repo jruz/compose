@@ -4,5 +4,5 @@ services:
 
   main:
     command: "echo $OVERRIDE_ME && exit 0"
-    env:
+    environment:
       OVERRIDE_ME: inline-wins

@@ -105,9 +105,9 @@ pub struct ProcessDef {
     #[serde(default)]
     pub depends_on: Vec<String>,
     pub docker: Option<DockerConfig>,
-    #[serde(default)]
-    pub env: BTreeMap<String, String>,
     pub env_file: Option<String>,
+    #[serde(default)]
+    pub environment: BTreeMap<String, String>,
     pub exec: Option<Vec<String>>,
     pub health: Option<HealthCheck>,
     #[serde(rename = "type", default = "default_process_type")]

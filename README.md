@@ -87,7 +87,7 @@ services:
   web:
     command: "node server.js"
     depends_on: [redis]
-    env:
+    environment:
       PORT: "3000"
 
   worker:
@@ -120,7 +120,7 @@ services:
       run:
         publish:
           - "${PG_PORT}:5432"
-    env:
+    environment:
       POSTGRES_PASSWORD: "${PG_PASSWORD}"
       POSTGRES_DB: "${PG_DB}"
     health:
@@ -184,7 +184,7 @@ services:
           ENV: "development"
 ```
 
-When `docker.build.args` is omitted, resolved env vars (inline `env`, `env_file`, global `--env-file`) are forwarded as build args. Set `args: {}` to forward none. Use explicit build args for non-secret inputs.
+When `docker.build.args` is omitted, resolved env vars (`environment`, `env_file`, global `--env-file`) are forwarded as build args. Set `args: {}` to forward none. Use explicit build args for non-secret inputs.
 
 Use Docker or Podman long flag names without `--`. Scalars become `--flag=value`; lists repeat the flag. `docker.build.args` uses `--build-arg`. Maps for `args` and `label` produce `--flag=KEY=value`. Quote version numbers to preserve their text.
 
@@ -200,7 +200,7 @@ Inline per-process:
 services:
   app:
     command: "node server.js"
-    env:
+    environment:
       PORT: "3000"
       NODE_ENV: "development"
 ```
@@ -229,7 +229,7 @@ services:
         publish:
           - "${APP_PORT}:${APP_PORT}"
     command: "node server.js --port ${APP_PORT}"
-    env:
+    environment:
       APP_PORT: "3000"
       DATABASE_URL: "postgres://user:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
     health:
@@ -238,10 +238,10 @@ services:
       timeout_secs: 10
 ```
 
-Applies to: `command`, `exec`, `docker.image`, `docker.build.context`, `docker.build.dockerfile`, build and run flag values, `health.command`, `health.exec`, and `env` values.
+Applies to: `command`, `exec`, `docker.image`, `docker.build.context`, `docker.build.dockerfile`, build and run flag values, `health.command`, `health.exec`, and `environment` values.
 Undefined variables stay literal: `${UNKNOWN}` remains `${UNKNOWN}`.
 
-Precedence: inline env > process env file > global env file > host environment.
+Precedence: service `environment` > service `env_file` > CLI `--env-file` > launching environment.
 
 ## Config schema
 
@@ -265,7 +265,7 @@ services:
         <flag>: <value> # Docker or Podman run flag
       stop_timeout_secs: <int> # seconds before force kill (default: 10)
     depends_on: [<string>, ...] # processes that must be healthy first
-    env:
+    environment:
       KEY: "VALUE"
     env_file: <path> # KEY=VALUE format, applied to this process
     health: # health check (one of command or exec)

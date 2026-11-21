@@ -7,7 +7,7 @@ services:
           - "${PG_HOST_PORT}:5432"
         volume:
           - "${PG_DATA}:/var/lib/postgresql/data"
-    env:
+    environment:
       PG_HOST_PORT: "5432"
       PG_USER: postgres
       PG_DATA: /tmp/compose-pg-data
@@ -24,7 +24,7 @@ services:
       run:
         publish:
           - "${REDIS_HOST_PORT}:6379"
-    env:
+    environment:
       REDIS_HOST_PORT: "6379"
       REDIS_PORT: "6379"
     health:
@@ -38,7 +38,7 @@ services:
       run:
         publish:
           - "${API_HOST_PORT}:80"
-    env:
+    environment:
       API_HOST_PORT: "18080"
       API_MSG: compose-interpolation-works
     exec: ["sh", "-c", "echo ${API_MSG} && exec nginx -g 'daemon off;'"]

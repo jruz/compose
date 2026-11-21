@@ -1,5 +1,5 @@
 services:
   main:
     command: "printenv RESULT && exit 0"
-    env:
+    environment:
       RESULT: "${NONEXISTENT}"

@@ -1,5 +1,5 @@
 services:
   main:
     command: "echo A=$A && exit 0"
-    env:
+    environment:
       A: "prefix-${A}"

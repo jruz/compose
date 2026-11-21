@@ -5,7 +5,7 @@ services:
       run:
         publish:
           - "5432:5432"
-    env:
+    environment:
       POSTGRES_PASSWORD: devpass
       POSTGRES_DB: app
     health:

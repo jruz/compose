@@ -165,12 +165,29 @@ fn env_file_skips_comment_lines() {
 
 #[test]
 fn env_precedence_chain() {
-    let output = run_with_env_file("env_precedence.yaml", "run", "env_precedence_global.env");
+    let bin = binary_path();
+    let config = fixture_path("env_precedence.yaml");
+    let env_file = fixture_path("env_precedence_global.env");
+    let output = std::process::Command::new(bin)
+        .arg("run")
+        .arg("--config")
+        .arg(config)
+        .arg("--env-file")
+        .arg(env_file)
+        .envs([
+            ("SHARED", "from-host"),
+            ("GLOBAL_ONLY", "from-host"),
+            ("PROC_ONLY", "from-host"),
+            ("COMPOSE_TEST_HOST_ONLY", "from-host"),
+        ])
+        .output()
+        .expect("run Compose with conflicting environment sources");
     assert_exit_code(&output, 0);
     assert_stdout_contains(&output, "SHARED=from-inline");
     assert_stdout_contains(&output, "GLOBAL_ONLY=global-val");
     assert_stdout_contains(&output, "PROC_ONLY=proc-val");
     assert_stdout_contains(&output, "INLINE_ONLY=inline-val");
+    assert_stdout_contains(&output, "HOST_ONLY=from-host");
 }
 
 #[test]

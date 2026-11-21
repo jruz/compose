@@ -4,5 +4,5 @@ services:
       image: compose-test-passthrough:1
       build:
         context: ./app
-    env:
+    environment:
       MY_VAR: "${MY_VAR}"

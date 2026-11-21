@@ -1,7 +1,7 @@
 services:
   startup-service:
     command: "echo $$ > ${COMPOSE_TEST_MARKER}; trap 'exit 0' TERM; while true; do sleep 1; done"
-    env:
+    environment:
       COMPOSE_TEST_MARKER: "${COMPOSE_TEST_MARKER}"
     health:
       command: "false"

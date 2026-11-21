@@ -1,6 +1,6 @@
 services:
   main:
     command: "echo RESULT=$RESULT && exit 0"
-    env:
+    environment:
       LOCAL: "compose-val"
       RESULT: "${LOCAL}:${HOST_MIX_VAR}"

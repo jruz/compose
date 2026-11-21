@@ -168,6 +168,15 @@ fn legacy_build_arg_key_rejected() {
 }
 
 #[test]
+fn legacy_env_key_rejected() {
+    let output = run_fixture("validation_legacy_env.yaml", "run");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(&output, "unknown field `env`");
+    assert_stdout_contains(&output, "`environment`");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("legacy-manifest-started"));
+}
+
+#[test]
 fn legacy_processes_key_rejected() {
     let output = run_fixture("validation_legacy_processes.yaml", "run");
     assert_exit_code(&output, 1);

@@ -35,7 +35,7 @@ Config schema:
         stop_timeout_secs: <int>      # seconds before force kill (default: 10)
       depends_on: [<string>, ...]     # processes that must be healthy first
       env_file: <string>              # optional path to KEY=VALUE file
-      env:                            # optional env vars (overrides env_file)
+      environment:                    # optional env vars (overrides env_file)
         KEY: \"VALUE\"
       health:                         # optional health check (one of command or exec)
         command: <string>             # health check shell command
@@ -45,8 +45,8 @@ Config schema:
 
 Variable interpolation:
 
-  ${VAR} resolves from inline env, env_file, --env-file, then host environment.
-  Applies to command, exec, health commands, env values, image, build context,
+  ${VAR} resolves from environment, env_file, --env-file, then host environment.
+  Applies to command, exec, health commands, environment values, image, build context,
   and Docker build/run flag values. Keys are not interpolated.
 
 Docker flags:

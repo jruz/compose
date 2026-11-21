@@ -1,0 +1,5 @@
+services:
+  main:
+    command: echo legacy-manifest-started
+    env:
+      GREETING: hello

@@ -24,7 +24,7 @@ pub fn resolve(
 }
 
 fn apply_inline_env(env: &mut BTreeMap<String, String>, proc_def: &config::ProcessDef) {
-    for (key, value) in &proc_def.env {
+    for (key, value) in &proc_def.environment {
         let key = key.clone();
         let value = value.clone();
         env.insert(key, value);

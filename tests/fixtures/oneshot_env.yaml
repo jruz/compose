@@ -2,7 +2,7 @@ services:
   init:
     type: oneshot
     command: "echo HELLO=$HELLO"
-    env:
+    environment:
       HELLO: "world"
 
   main:

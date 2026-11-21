@@ -4,6 +4,6 @@ services:
       image: compose-test-empty-env-main:1
       build:
         context: ./app
-    env:
+    environment:
       EMPTY_VAR: ""
       SET_VAR: "has-value"

@@ -10,6 +10,6 @@ services:
       image: compose-test-env-main:1
       build:
         context: ./main
-    env:
+    environment:
       MY_VAR: "hello-from-env"
       OTHER_VAR: "42"

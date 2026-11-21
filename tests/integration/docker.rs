@@ -432,7 +432,7 @@ fn docker_volume_expansion_from_process_env() -> Result<(), Error> {
         docker_volume_populate(vol, "file.txt", "expanded-process-var\n")?;
         let dir = fixture_path("docker_volume_expansion");
         let compose_content = format!(
-            "services:\n  vol-proc:\n    docker:\n      image: compose-test-vol-proc\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"${{DATA_PATH}}:/mnt/data\"\n    env:\n      DATA_PATH: \"{vol}\"\n"
+            "services:\n  vol-proc:\n    docker:\n      image: compose-test-vol-proc\n      build:\n        context: ./app\n      run:\n        volume:\n          - \"${{DATA_PATH}}:/mnt/data\"\n    environment:\n      DATA_PATH: \"{vol}\"\n"
         );
         let compose_path = dir.join("compose_proc.yaml");
         std::fs::write(&compose_path, compose_content)?;
