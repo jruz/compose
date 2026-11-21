@@ -438,21 +438,26 @@ fn process_group_cleanup() {
 }
 
 #[test]
-fn shell_bash() {
+fn host_string_command_supports_process_substitution() {
     let output = run_fixture("shell_bash.yaml", "run");
     assert_exit_code(&output, 0);
-    let stdout = stdout_of(&output);
-    let version_line = stdout
-        .lines()
-        .find(|line| line.contains("[main]") && !line.contains("starting"))
-        .and_then(|line| line.split("[main]").nth(1))
-        .map(str::trim)
-        .expect("expected version output from bash");
-    assert!(
-        version_line
-            .chars()
-            .next()
-            .is_some_and(|ch| ch.is_ascii_digit()),
-        "expected bash version digit, got: {version_line}"
+    assert_stdout_contains(&output, "[main] process substitution works\n");
+}
+
+#[test]
+fn host_string_command_requires_bash_on_path() {
+    let bin = binary_path();
+    let config = fixture_path("shell_bash.yaml");
+    let path = fixture_path("");
+    let output = std::process::Command::new(bin)
+        .args(["run", "--config"])
+        .arg(config)
+        .env("PATH", path)
+        .output()
+        .expect("run Compose without Bash on PATH");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(
+        &output,
+        "Bash is required for host string commands but was not found in PATH",
     );
 }

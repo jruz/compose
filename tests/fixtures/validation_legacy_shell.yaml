@@ -1,0 +1,4 @@
+shell: bash
+services:
+  main:
+    command: echo legacy-manifest-started

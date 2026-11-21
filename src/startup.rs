@@ -119,10 +119,6 @@ pub async fn start_all(
     network: Option<&str>,
     actors: &mut Vec<message::ActorHandle>,
 ) -> Result<StartupResult, Error> {
-    let shell = match &config.shell {
-        Some(shell) => shell.as_str(),
-        None => "sh",
-    };
     for name in start_order {
         let proc_def = config
             .services
@@ -147,7 +143,7 @@ pub async fn start_all(
 
         let env = env::resolve(global_env, proc_def)?;
 
-        let actor = spawn_process_actor(name, proc_def, shell, &env, network, channels)?;
+        let actor = spawn_process_actor(name, proc_def, &env, network, channels)?;
         actors.push(actor);
 
         if is_oneshot {
@@ -400,7 +396,6 @@ fn expand_command(command: &config::Command, env: &BTreeMap<String, String>) -> 
 fn spawn_process_actor(
     name: &str,
     proc_def: &config::ProcessDef,
-    shell: &str,
     env: &std::collections::BTreeMap<String, String>,
     network: Option<&str>,
     channels: &Channels<'_>,
@@ -437,7 +432,7 @@ fn spawn_process_actor(
         })?;
         let events = channels.events.clone();
         let display = channels.display.clone();
-        let actor = process::spawn_actor(name, &expanded_command, shell, env, events, display)?;
+        let actor = process::spawn_actor(name, &expanded_command, env, events, display)?;
         Ok(actor)
     }
 }

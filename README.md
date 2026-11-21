@@ -97,7 +97,7 @@ services:
 
 ### Commands
 
-A host `command` string runs through the configured shell. A container `command` string is split on whitespace and passed as a CMD override without a shell.
+A host `command` string requires Bash on `PATH` and runs with `bash -c`. Host health probe strings still use `sh -c`. A container `command` string is split on whitespace and passed as a CMD override without a shell.
 
 Use a list to pass exact arguments on either runtime:
 
@@ -265,11 +265,10 @@ Use `services` for host processes, containers, and one-shot tasks.
 
 ```yaml
 runtime: <docker|podman> # container runtime (default: docker)
-shell: <string> # shell for exec processes (default: sh)
 services:
   <name>:
     type: <service|oneshot> # process type (default: service)
-    command: <string|list> # host shell command or container CMD override; lists pass arguments directly
+    command: <string|list> # host Bash command or container CMD override; lists pass arguments directly
     docker: # presence of this section makes it a docker process
       image: <string> # docker image (required if no build)
       build: # required if no image

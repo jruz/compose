@@ -9,6 +9,9 @@ use crate::message;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("{name}: Bash is required for host string commands but was not found in PATH")]
+    BashNotFound { name: String },
+
     #[error("{name}: host command list requires an executable")]
     MissingExecutable { name: String },
 
@@ -28,12 +31,11 @@ pub enum Error {
 pub fn spawn_actor(
     name: &str,
     command: &config::Command,
-    shell: &str,
     env: &BTreeMap<String, String>,
     event_tx: mpsc::UnboundedSender<message::ActorExited>,
     display_tx: mpsc::UnboundedSender<message::DisplayMsg>,
 ) -> Result<message::ActorHandle, Error> {
-    let mut std_cmd = host_command(name, command, shell)?;
+    let mut std_cmd = host_command(name, command)?;
     let piped_out = std::process::Stdio::piped();
     let piped_err = std::process::Stdio::piped();
     let stdin = std::process::Stdio::null();
@@ -46,10 +48,13 @@ pub fn spawn_actor(
     let mut cmd = tokio::process::Command::from(std_cmd);
     cmd.kill_on_drop(true);
 
-    let mut spawned = spawn_child(&mut cmd).map_err(|source| Error::Spawn {
-        name: name.to_string(),
-        source,
-    })?;
+    let mut spawned = match spawn_child(&mut cmd) {
+        Ok(child) => child,
+        Err(source) => {
+            let error = host_spawn_error(name, command, source);
+            return Err(error);
+        }
+    };
 
     let drain = actor::setup_output_drain(name, &mut spawned, display_tx);
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
@@ -70,14 +75,20 @@ pub fn spawn_actor(
     })
 }
 
-fn host_command(
-    name: &str,
-    command: &config::Command,
-    shell: &str,
-) -> Result<std::process::Command, Error> {
+fn host_spawn_error(name: &str, command: &config::Command, source: std::io::Error) -> Error {
+    let name = name.to_string();
+    if matches!(command, config::Command::String(_))
+        && source.kind() == std::io::ErrorKind::NotFound
+    {
+        return Error::BashNotFound { name };
+    }
+    Error::Spawn { name, source }
+}
+
+fn host_command(name: &str, command: &config::Command) -> Result<std::process::Command, Error> {
     let mut cmd = match command {
         config::Command::String(script) => {
-            let mut cmd = std::process::Command::new(shell);
+            let mut cmd = std::process::Command::new("bash");
             cmd.arg("-c").arg(script);
             cmd
         }

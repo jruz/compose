@@ -196,8 +196,10 @@ fn last_process_oneshot() {
 }
 
 #[test]
-fn nonexistent_shell_binary() {
-    let output = run_fixture("shell_nonexistent.yaml", "run");
-    assert_ne!(output.status.code(), Some(0_i32));
-    assert_stdout_contains(&output, "failed to spawn");
+fn legacy_shell_key_rejected() {
+    let output = run_fixture("validation_legacy_shell.yaml", "run");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(&output, "unknown field `shell`");
+    assert_stdout_contains(&output, "`services`");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("legacy-manifest-started"));
 }

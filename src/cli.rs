@@ -17,11 +17,10 @@ Processes start in dependency order. Health checks gate dependent startup.
 Config schema:
 
   runtime: <docker|podman>            # container runtime (default: docker)
-  shell: <string>                     # shell for exec processes (default: sh)
   services:
     <name>:                           # unique host, container, or oneshot service name
       type: <service|oneshot>         # process type (default: service)
-      command: <string|list>          # host strings use shell; container strings split on whitespace
+      command: <string|list>          # host strings use bash -c; container strings split on whitespace
                                       # lists pass arguments directly on either runtime
       docker:                         # container driver (alternative to command)
         image: <string>               # docker image (required if no build)

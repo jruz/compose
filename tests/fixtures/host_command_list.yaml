@@ -1,4 +1,3 @@
-shell: compose-test-unavailable-shell
 services:
   main:
     command: [printf, '%s\n', '<${PHRASE}>', '<; $HOME * | >']

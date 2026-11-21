@@ -65,7 +65,6 @@ pub struct Config {
     #[serde(default)]
     pub runtime: Runtime,
     pub services: IndexMap<String, ProcessDef>,
-    pub shell: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
