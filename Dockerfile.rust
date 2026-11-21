@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && curl --proto '=https' --tlsv1.2 -LsSf "https://github.com/cargo-bins/cargo-binstall/releases/download/v${CARGO_BINSTALL_VERSION}/cargo-binstall-${ARCH}-unknown-linux-musl.tgz" \
     | tar -xz -C /usr/local/cargo/bin \
     && cargo binstall --no-confirm \
-    cargo-nextest@0.9.151 \
+    cargo-nextest@0.9.152 \
     cargo-watch@8.5.3 \
     cargo-edit@0.13.14 \
     cargo-machete@0.9.2 \
