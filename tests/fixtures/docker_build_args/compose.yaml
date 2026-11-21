@@ -12,7 +12,7 @@ services:
     docker:
       build:
         context: ./app
-        build-arg: {}
+        args: {}
     env:
       GREETING: not-forwarded
   build-args-main:
@@ -22,7 +22,7 @@ services:
       build:
         context: "${BUILD_CONTEXT}"
         dockerfile: "${BUILD_FILE}"
-        build-arg:
+        args:
           GREETING: "${MESSAGE}"
       run:
         workdir: "${WORKDIR}"

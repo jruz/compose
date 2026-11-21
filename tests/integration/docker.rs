@@ -60,7 +60,7 @@ fn docker_build_args() {
     assert_stdout_contains(&output, "[implicit] baked: implicit-from-env");
     assert_stdout_contains(&output, "[empty] baked: unset");
     assert_stdout_contains(&output, "[build-args-main] /first");
-    assert_stdout_contains(&output, "baked: hello from build arg");
+    assert_stdout_contains(&output, "[build-args-main] baked: hello from build arg");
 }
 
 #[test]

@@ -179,14 +179,14 @@ services:
     docker:
       build:
         context: ./app
-        build-arg:
+        args:
           NODE_VERSION: "${NODE_VERSION}"
           ENV: "development"
 ```
 
-When `build-arg` is omitted, resolved env vars (inline `env`, `env_file`, global `--env-file`) are forwarded as build args. Set `build-arg: {}` to forward none. Use explicit build args for non-secret inputs.
+When `docker.build.args` is omitted, resolved env vars (inline `env`, `env_file`, global `--env-file`) are forwarded as build args. Set `args: {}` to forward none. Use explicit build args for non-secret inputs.
 
-Use Docker or Podman long flag names without `--`. Scalars become `--flag=value`; lists repeat the flag. `build-arg` and `label` also accept maps, which produce `--flag=KEY=value`. Quote version numbers to preserve their text.
+Use Docker or Podman long flag names without `--`. Scalars become `--flag=value`; lists repeat the flag. `docker.build.args` uses `--build-arg`. Maps for `args` and `label` produce `--flag=KEY=value`. Quote version numbers to preserve their text.
 
 Compose reserves build `tag`, `progress`, and `help`, and run `attach`, `detach`, `help`, `log-driver`, `name`, `net`, `network`, `network-alias`, `restart`, `rm`, and `stop-timeout`. Use `docker.stop_timeout_secs` for shutdown timing.
 

@@ -28,7 +28,7 @@ Config schema:
         build:                        # required if no image
           context: <string>           # positional build context
           dockerfile: <string>        # optional Dockerfile path passed to --file
-          build-arg: {KEY: \"VALUE\"}   # omit to forward resolved env; {} to disable
+          args: {KEY: \"VALUE\"}        # omit to forward resolved env; {} to disable
         run:                          # extra docker run or podman run flags
           publish: [<host:container>] # example: repeated --publish
           init: <bool>                # example: --init=true or --init=false
@@ -52,7 +52,8 @@ Variable interpolation:
 Docker flags:
 
   Use long CLI flag names without leading dashes. A scalar becomes --flag=value;
-  lists repeat the flag. Maps for build-arg and label produce --flag=KEY=value.
+  Lists repeat the flag. Build args use --build-arg; args and label maps
+  produce --flag=KEY=value.
   Compose reserves flags that it manages for build output and container lifecycle.
   Undefined variables stay literal: ${UNKNOWN} remains ${UNKNOWN}."
 )]

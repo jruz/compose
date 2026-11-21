@@ -157,6 +157,17 @@ fn legacy_build_file_key_rejected() {
 }
 
 #[test]
+fn legacy_build_arg_key_rejected() {
+    let output = run_fixture("validation_legacy_build_arg.yaml", "run");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(
+        &output,
+        "docker.build: unknown field `build-arg`, expected `context`, `dockerfile`, `args`",
+    );
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("[docker] creating network"));
+}
+
+#[test]
 fn legacy_processes_key_rejected() {
     let output = run_fixture("validation_legacy_processes.yaml", "run");
     assert_exit_code(&output, 1);

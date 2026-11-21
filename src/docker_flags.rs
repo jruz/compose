@@ -14,7 +14,12 @@ pub enum Error {
     Reserved { section: &'static str, flag: String },
 
     #[error(
-        "docker.{section}.{flag}: use a scalar or list; maps are only supported for build-arg and label"
+        "docker.build: unknown field `build-arg`, expected `context`, `dockerfile`, `args`, or an extra build flag"
+    )]
+    UnknownBuildArg,
+
+    #[error(
+        "docker.{section}.{flag}: use a scalar or list; maps are only supported for docker.build.args and label"
     )]
     UnsupportedMap { section: &'static str, flag: String },
 }
@@ -47,6 +52,9 @@ pub enum Scalar {
 
 pub fn validate(docker: &config::DockerConfig) -> Result<(), Error> {
     if let Some(build) = &docker.build {
+        if build.flags.contains_key("build-arg") {
+            return Err(Error::UnknownBuildArg);
+        }
         validate_flags("build", &build.flags, &["file", "tag", "progress", "help"])?;
     }
     validate_flags(
@@ -101,16 +109,23 @@ fn valid_name(flag: &str) -> bool {
 }
 
 fn supports_map(section: &str, flag: &str) -> bool {
-    flag == "label" || (section == "build" && flag == "build-arg")
+    flag == "label" || (section == "build" && flag == "args")
 }
 
 pub fn build_args(build: &Build, env: &BTreeMap<String, String>) -> Vec<String> {
-    let mut args = args(&build.flags, env);
+    let mut args: Vec<String> = build
+        .flags
+        .iter()
+        .flat_map(|(name, value)| match name.as_str() {
+            "args" => flag_args("build-arg", value, env),
+            name => flag_args(name, value, env),
+        })
+        .collect();
     if let Some(dockerfile) = &build.dockerfile {
         let path = env::expand_vars(dockerfile, env);
         args.push(format!("--file={path}"));
     }
-    if !build.flags.contains_key("build-arg") {
+    if !build.flags.contains_key("args") {
         let forwarded = env
             .iter()
             .map(|(key, value)| format!("--build-arg={key}={value}"));
