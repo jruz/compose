@@ -1,3 +1,4 @@
+env_file: ../env_precedence_shared.env
 services:
   env-bg:
     docker:
@@ -10,6 +11,8 @@ services:
       image: compose-test-env-main:1
       build:
         context: ./main
+    command: [sh, -c, 'echo MY_VAR="$MY_VAR" OTHER_VAR="$OTHER_VAR" MANIFEST_ONLY="$MANIFEST_ONLY" SHARED="$SHARED"']
     environment:
+      SHARED: "from-inline"
       MY_VAR: "hello-from-env"
       OTHER_VAR: "42"

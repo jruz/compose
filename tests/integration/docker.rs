@@ -134,6 +134,8 @@ fn docker_env() {
     assert_exit_code(&output, 0);
     assert_stdout_contains(&output, "MY_VAR=hello-from-env");
     assert_stdout_contains(&output, "OTHER_VAR=42");
+    assert_stdout_contains(&output, "MANIFEST_ONLY=manifest-val");
+    assert_stdout_contains(&output, "SHARED=from-inline");
 }
 
 #[test]

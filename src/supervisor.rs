@@ -78,8 +78,9 @@ pub async fn run(
     let start_order = startup::resolve_start_order(&config);
     let shutdown = resolve_shutdown(&mode, &start_order)?;
     check_main_not_oneshot(&shutdown, &config)?;
-    let env_path = global_env_file.as_deref();
-    let global_env = env::load_global(env_path)?;
+    let shared_path = config.env_file.as_deref();
+    let cli_path = global_env_file.as_deref();
+    let global_env = env::load_global(shared_path, cli_path)?;
     let mut signals = lifecycle::register_signals()?;
     let network_name = has_docker.then(|| docker_infra::generate_network_name(&project_name));
 

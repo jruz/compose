@@ -221,15 +221,17 @@ services:
       NODE_ENV: "development"
 ```
 
-From a `.env` applied to all processes:
+Set top-level `env_file` to share `KEY=VALUE` defaults across all services. Like service `env_file`, relative paths resolve from the working directory.
 
-```
+Use `--env-file` to override shared defaults for one invocation:
+
+```sh
 compose run --config compose.yaml --env-file .env
 ```
 
-With sops-encrypted secrets via process substitution:
+When launching from Bash, `--env-file` also accepts process substitution without any manifest setting:
 
-```
+```bash
 compose run --config compose.yaml --env-file <(sops --decrypt secrets.env)
 ```
 
@@ -257,13 +259,14 @@ services:
 Applies to: `command` strings and list items, `docker.image`, `docker.build.context`, `docker.build.dockerfile`, build and run flag values, arguments in `healthcheck.test`, and `environment` values.
 Undefined variables stay literal: `${UNKNOWN}` remains `${UNKNOWN}`.
 
-Precedence: service `environment` > service `env_file` > CLI `--env-file` > launching environment.
+Precedence for runtime values and `${VAR}` lookup: service `environment` > service `env_file` > CLI `--env-file` > top-level `env_file` > launching environment.
 
 ## Config schema
 
 Use `services` for host processes, containers, and one-shot tasks.
 
 ```yaml
+env_file: <path> # optional shared KEY=VALUE defaults
 runtime: <docker|podman> # container runtime (default: docker)
 services:
   <name>:

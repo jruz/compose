@@ -23,13 +23,23 @@ fn env_file_override() {
 
 #[test]
 fn env_file_process_substitution() {
-    let bin = binary_path().display().to_string();
-    let config = fixture_path("env_file.yaml").display().to_string();
-    let env_file = fixture_path("test.env").display().to_string();
-    let script = format!("{bin} run --config {config} --env-file <(cat {env_file})");
-    let output = run_shell_script(&format!("bash -c '{script}'"));
+    let bin = binary_path();
+    let config = fixture_path("env_precedence.yaml");
+    let env_file = fixture_path("env_precedence_global.env");
+    let output = std::process::Command::new("bash")
+        .args([
+            "-c",
+            r#""$1" run --config "$2" --env-file <(cat "$3")"#,
+            "bash",
+        ])
+        .arg(bin)
+        .arg(config)
+        .arg(env_file)
+        .output()
+        .expect("run Compose with Bash process substitution");
     assert_exit_code(&output, 0);
-    assert_stdout_contains(&output, "loaded-from-env-file");
+    assert_stdout_contains(&output, "GLOBAL_ONLY=global-val");
+    assert_stdout_contains(&output, "MANIFEST_ONLY=manifest-val");
 }
 
 #[test]
@@ -178,6 +188,7 @@ fn env_precedence_chain() {
             ("SHARED", "from-host"),
             ("GLOBAL_ONLY", "from-host"),
             ("PROC_ONLY", "from-host"),
+            ("MANIFEST_ONLY", "from-host"),
             ("COMPOSE_TEST_HOST_ONLY", "from-host"),
         ])
         .output()
@@ -187,6 +198,8 @@ fn env_precedence_chain() {
     assert_stdout_contains(&output, "GLOBAL_ONLY=global-val");
     assert_stdout_contains(&output, "PROC_ONLY=proc-val");
     assert_stdout_contains(&output, "INLINE_ONLY=inline-val");
+    assert_stdout_contains(&output, "MANIFEST_ONLY=manifest-val");
+    assert_stdout_contains(&output, "MANIFEST_INTERPOLATED=manifest-val");
     assert_stdout_contains(&output, "HOST_ONLY=from-host");
 }
 

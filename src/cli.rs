@@ -16,6 +16,7 @@ Processes start in dependency order. Health checks gate dependent startup.
 
 Config schema:
 
+  env_file: <string>                  # optional shared KEY=VALUE defaults
   runtime: <docker|podman>            # container runtime (default: docker)
   services:
     <name>:                           # unique host, container, or oneshot service name
@@ -43,7 +44,8 @@ Config schema:
 
 Variable interpolation:
 
-  ${VAR} resolves from environment, env_file, --env-file, then host environment.
+  ${VAR} resolves from service environment, service env_file, CLI --env-file,
+  top-level env_file, then host environment.
   Applies to command strings and each list item, health commands, environment values,
   image, build context, and Docker build/run flag values. Keys are not interpolated.
 
@@ -65,7 +67,10 @@ pub struct ConfigArg {
     #[arg(long, help = "Path to the YAML compose file")]
     pub config: PathBuf,
 
-    #[arg(long, help = "Path to a global KEY=VALUE env file")]
+    #[arg(
+        long,
+        help = "Path to a shared KEY=VALUE override file; accepts Bash process substitution"
+    )]
     pub env_file: Option<PathBuf>,
 }
 

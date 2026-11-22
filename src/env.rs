@@ -211,14 +211,16 @@ fn format_cycle(path: &[&str], back_edge: &str) -> String {
     }
 }
 
-pub fn load_global(path: Option<&Path>) -> Result<BTreeMap<String, String>, Error> {
-    if let Some(path) = path {
-        let env = config::parse_env_file(path)?;
-        Ok(env)
-    } else {
-        let empty = BTreeMap::new();
-        Ok(empty)
+pub fn load_global(
+    shared_path: Option<&Path>,
+    cli_path: Option<&Path>,
+) -> Result<BTreeMap<String, String>, Error> {
+    let mut env = BTreeMap::new();
+    for path in [shared_path, cli_path].into_iter().flatten() {
+        let file_env = config::parse_env_file(path)?;
+        env.extend(file_env);
     }
+    Ok(env)
 }
 
 fn load_process_env_file(

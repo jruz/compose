@@ -18,12 +18,8 @@ pub enum Error {
     #[error("{name}: docker requires image or build")]
     DockerNoImageOrBuild { name: String },
 
-    #[error("malformed env file {path} at line {line_number}: {line}")]
-    EnvFileMalformed {
-        path: PathBuf,
-        line_number: usize,
-        line: String,
-    },
+    #[error("malformed env file {path} at line {line_number}: expected KEY=VALUE")]
+    EnvFileMalformed { path: PathBuf, line_number: usize },
 
     #[error("{name}: exec driver requires command")]
     ExecNoCommand { name: String },
@@ -59,6 +55,7 @@ pub enum Error {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    pub env_file: Option<PathBuf>,
     #[serde(default)]
     pub runtime: Runtime,
     pub services: IndexMap<String, ProcessDef>,
@@ -165,7 +162,6 @@ pub fn parse_env_file(path: &Path) -> Result<BTreeMap<String, String>, Error> {
                 .ok_or_else(|| Error::EnvFileMalformed {
                     path: path.to_path_buf(),
                     line_number: i + 1,
-                    line: line.to_string(),
                 })?;
             let key_str = key.trim().to_string();
             let value_str = value.trim().to_string();
