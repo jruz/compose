@@ -16,6 +16,66 @@ fn host_command_list_preserves_arguments() {
 }
 
 #[test]
+fn host_command_spread_preserves_arguments() {
+    let value = Some(r#"["--grep", "can save", "; $HOME * |"]"#);
+    let output = run_host_spread(value);
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(
+        &output,
+        "[main] <before>\n[main] <--grep>\n[main] <can save>\n[main] <; $HOME * |>\n[main] <after>\n",
+    );
+}
+
+#[test]
+fn host_command_spread_empty_array_adds_no_arguments() {
+    let value = Some("[]");
+    let output = run_host_spread(value);
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(&output, "[main] <before>\n[main] <after>\n");
+}
+
+#[test]
+fn host_command_spread_missing_variable_fails() {
+    let output = run_host_spread(None);
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(
+        &output,
+        "command spread variable COMPOSE_TEST_SPREAD is not set",
+    );
+}
+
+#[test]
+fn host_command_spread_invalid_array_fails_without_logging_value() {
+    let values = [
+        Some("synthetic-do-not-log"),
+        Some(r#"["synthetic-do-not-log", 42]"#),
+    ];
+    for value in values {
+        let output = run_host_spread(value);
+        assert_exit_code(&output, 1);
+        assert_stdout_contains(
+            &output,
+            "command spread COMPOSE_TEST_SPREAD must be a JSON array of strings",
+        );
+        assert!(!stdout_of(&output).contains("synthetic-do-not-log"));
+        assert!(!stderr_of(&output).contains("synthetic-do-not-log"));
+    }
+}
+
+fn run_host_spread(value: Option<&str>) -> std::process::Output {
+    let bin = binary_path();
+    let config = fixture_path("host_command_spread.yaml");
+    let mut command = std::process::Command::new(bin);
+    command.args(["run", "--config"]).arg(config);
+    if let Some(value) = value {
+        command.env("COMPOSE_TEST_SPREAD", value);
+    } else {
+        command.env_remove("COMPOSE_TEST_SPREAD");
+    }
+    command.output().expect("run host command with spread")
+}
+
+#[test]
 fn run_main_exits_nonzero() {
     let output = run_fixture("run_exit_nonzero.yaml", "run");
     assert_exit_code(&output, 42);

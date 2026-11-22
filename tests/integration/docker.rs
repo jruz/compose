@@ -603,6 +603,7 @@ fn docker_command_list_preserves_arguments() {
     assert_exit_code(&output, 0);
     assert_stdout_contains(&output, "[echo-exec] <two words>\n");
     assert_stdout_contains(&output, "[echo-exec] <; $HOME * | >\n");
+    assert_stdout_contains(&output, "[echo-exec] --grep\n[echo-exec] can save\n");
 }
 
 #[test]

@@ -51,6 +51,8 @@ Variable interpolation:
   then host environment.
   sops_file requires sops on PATH and is decrypted in memory. Builds and docker.image
   interpolation skip both sops_file layers. Keys are not interpolated.
+  Compose extension: a whole list-form command item \"...${VAR}\" spreads a JSON
+  array of strings into separate arguments. An empty array adds no arguments.
 
 Docker flags:
 

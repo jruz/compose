@@ -273,6 +273,18 @@ Runtime precedence, highest first: service `environment` > service `sops_file` >
 
 Use `env_file` and `sops_file` together to combine values. At the same scope, `sops_file` overrides duplicate keys. Build settings and `docker.image` skip both `sops_file` layers, even when a variable is referenced indirectly.
 
+A whole list-form `command` item of the form `"...${VAR}"` is a Compose extension. The resolved variable must contain a JSON array of strings:
+
+```yaml
+services:
+  tests:
+    command: [pnpm, exec, playwright, test, "...${PLAYWRIGHT_ARGS}"]
+    environment:
+      PLAYWRIGHT_ARGS: '["--grep", "can save"]'
+```
+
+This passes `--grep` and `can save` as separate arguments on the host or in a container, without a shell. `[]` adds no arguments. Missing or invalid values fail without printing their contents.
+
 ## Config schema
 
 Use `services` for host processes, containers, and one-shot tasks.

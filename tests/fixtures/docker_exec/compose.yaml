@@ -4,6 +4,7 @@ services:
       image: compose-test-echo-exec:1
       build:
         context: .
-    command: [printf, '%s\n', '<${PHRASE}>', '<; $HOME * | >']
+    command: [printf, '%s\n', '<${PHRASE}>', '<; $HOME * | >', '...${PLAYWRIGHT_ARGS}']
     environment:
       PHRASE: two words
+      PLAYWRIGHT_ARGS: '["--grep", "can save"]'

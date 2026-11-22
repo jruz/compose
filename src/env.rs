@@ -26,6 +26,12 @@ pub enum Error {
 
     #[error("sops output for {path} is not valid dotenv")]
     SopsOutput { path: PathBuf },
+
+    #[error("command spread {name} must be a JSON array of strings without NUL bytes")]
+    SpreadInvalid { name: String },
+
+    #[error("command spread variable {name} is not set")]
+    SpreadMissing { name: String },
 }
 
 pub struct Global {
@@ -110,6 +116,51 @@ fn interpolate(env: &mut BTreeMap<String, String>) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+pub fn expand_command_args(
+    args: &[String],
+    env: &BTreeMap<String, String>,
+) -> Result<Vec<String>, Error> {
+    let mut expanded = Vec::new();
+    for arg in args {
+        if let Some(name) = spread_name(arg) {
+            let values = spread_values(name, env)?;
+            expanded.extend(values);
+        } else {
+            let value = expand_vars(arg, env);
+            expanded.push(value);
+        }
+    }
+    Ok(expanded)
+}
+
+fn spread_name(arg: &str) -> Option<&str> {
+    let name = arg.strip_prefix("...${")?.strip_suffix('}')?;
+    if name.is_empty() || name.contains(['{', '}']) {
+        return None;
+    }
+    Some(name)
+}
+
+fn spread_values(name: &str, env: &BTreeMap<String, String>) -> Result<Vec<String>, Error> {
+    let host_value;
+    let value = if let Some(value) = env.get(name) {
+        value
+    } else {
+        host_value = std::env::var_os(name).ok_or_else(|| Error::SpreadMissing {
+            name: name.to_string(),
+        })?;
+        host_value.to_str().ok_or_else(|| Error::SpreadInvalid {
+            name: name.to_string(),
+        })?
+    };
+    match serde_json::from_str::<Vec<String>>(value) {
+        Ok(args) if args.iter().all(|arg| !arg.contains('\0')) => Ok(args),
+        _ => Err(Error::SpreadInvalid {
+            name: name.to_string(),
+        }),
+    }
 }
 
 pub fn expand_vars(value: &str, env: &BTreeMap<String, String>) -> String {

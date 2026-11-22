@@ -1,0 +1,3 @@
+services:
+  main:
+    command: [printf, '<%s>\n', before, '...${COMPOSE_TEST_SPREAD}', after]

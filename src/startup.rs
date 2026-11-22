@@ -364,17 +364,21 @@ async fn start_service(
     }
 }
 
-fn expand_command(command: &config::Command, env: &BTreeMap<String, String>) -> config::Command {
-    match command {
+fn expand_command(
+    command: &config::Command,
+    env: &BTreeMap<String, String>,
+) -> Result<config::Command, env::Error> {
+    let command = match command {
         config::Command::String(script) => {
             let script = env::expand_vars(script, env);
             config::Command::String(script)
         }
         config::Command::List(args) => {
-            let args = args.iter().map(|arg| env::expand_vars(arg, env)).collect();
+            let args = env::expand_command_args(args, env)?;
             config::Command::List(args)
         }
-    }
+    };
+    Ok(command)
 }
 
 fn spawn_process_actor(
@@ -388,7 +392,8 @@ fn spawn_process_actor(
     let expanded_command = proc_def
         .command
         .as_ref()
-        .map(|command| expand_command(command, env));
+        .map(|command| expand_command(command, env))
+        .transpose()?;
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
         let image_ref = runtime.image.as_deref();
         let image = docker::image_tag(net, name, image_ref);
