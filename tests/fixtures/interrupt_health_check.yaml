@@ -3,8 +3,8 @@ services:
     command: "echo $$ > ${COMPOSE_TEST_MARKER}; trap 'exit 0' TERM; while true; do sleep 1; done"
     environment:
       COMPOSE_TEST_MARKER: "${COMPOSE_TEST_MARKER}"
-    health:
-      command: "false"
+    healthcheck:
+      test: [sh, -c, "false"]
       interval_secs: 1
       timeout_secs: 30
 

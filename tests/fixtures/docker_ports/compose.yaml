@@ -7,7 +7,7 @@ services:
       run:
         publish:
           - "18793:8080"
-    health:
-      command: "cat /tmp/ready"
+    healthcheck:
+      test: [sh, -c, "cat /tmp/ready"]
       interval_secs: 1
       timeout_secs: 10

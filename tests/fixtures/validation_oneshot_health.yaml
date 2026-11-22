@@ -2,8 +2,8 @@ services:
   init:
     type: oneshot
     command: "echo done"
-    health:
-      command: "true"
+    healthcheck:
+      test: [sh, -c, "true"]
       interval_secs: 1
       timeout_secs: 5
 

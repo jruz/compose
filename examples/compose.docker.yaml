@@ -8,8 +8,8 @@ services:
     environment:
       POSTGRES_PASSWORD: devpass
       POSTGRES_DB: app
-    health:
-      command: "pg_isready -U postgres"
+    healthcheck:
+      test: [sh, -c, "pg_isready -U postgres"]
       interval_secs: 1
       timeout_secs: 10
 
@@ -19,8 +19,8 @@ services:
       run:
         publish:
           - "6379:6379"
-    health:
-      command: "redis-cli ping"
+    healthcheck:
+      test: [sh, -c, "redis-cli ping"]
       interval_secs: 1
       timeout_secs: 5
 

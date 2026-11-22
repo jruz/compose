@@ -4,7 +4,7 @@ services:
 
   b-db:
     command: "sleep 60"
-    health:
-      command: "false"
+    healthcheck:
+      test: [sh, -c, "false"]
       interval_secs: 1
       timeout_secs: 3

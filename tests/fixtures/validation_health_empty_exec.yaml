@@ -1,8 +1,8 @@
 services:
   svc:
     command: "exec sleep 10"
-    health:
-      exec: []
+    healthcheck:
+      test: []
       interval_secs: 1
       timeout_secs: 5
 

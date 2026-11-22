@@ -3,8 +3,8 @@ services:
     command: '(sleep 2 && touch "${MARKER}") & echo service-started && exec sleep 10'
     environment:
       MARKER: "${COMPOSE_TEST_MARKER}"
-    health:
-      command: 'test -f "${MARKER}" && rm "${MARKER}"'
+    healthcheck:
+      test: [sh, -c, 'test -f "${MARKER}" && rm "${MARKER}"']
       interval_secs: 1
       timeout_secs: 5
 

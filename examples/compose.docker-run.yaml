@@ -13,8 +13,8 @@ services:
       PG_DATA: /tmp/compose-pg-data
       POSTGRES_PASSWORD: devpass
       POSTGRES_DB: app
-    health:
-      command: "pg_isready -U ${PG_USER}"
+    healthcheck:
+      test: [sh, -c, "pg_isready -U ${PG_USER}"]
       interval_secs: 1
       timeout_secs: 10
 
@@ -27,8 +27,8 @@ services:
     environment:
       REDIS_HOST_PORT: "6379"
       REDIS_PORT: "6379"
-    health:
-      exec: ["redis-cli", "-p", "${REDIS_PORT}", "ping"]
+    healthcheck:
+      test: ["redis-cli", "-p", "${REDIS_PORT}", "ping"]
       interval_secs: 1
       timeout_secs: 5
 

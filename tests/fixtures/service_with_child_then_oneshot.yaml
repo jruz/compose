@@ -1,8 +1,8 @@
 services:
   db:
     command: "sh -c 'echo db-child-running >> /dev/stderr & echo db-ready; sleep 30'"
-    health:
-      command: "true"
+    healthcheck:
+      test: [sh, -c, "true"]
       interval_secs: 1
       timeout_secs: 5
 

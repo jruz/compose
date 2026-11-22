@@ -4,8 +4,8 @@ services:
       image: compose-test-diamond-db:1
       build:
         context: ./db
-    health:
-      command: "true"
+    healthcheck:
+      test: [sh, -c, "true"]
       interval_secs: 1
       timeout_secs: 10
 
@@ -14,8 +14,8 @@ services:
       image: compose-test-diamond-cache:1
       build:
         context: ./cache
-    health:
-      command: "true"
+    healthcheck:
+      test: [sh, -c, "true"]
       interval_secs: 1
       timeout_secs: 10
 

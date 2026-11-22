@@ -4,7 +4,7 @@ services:
       image: compose-test-interrupt-health:1
       build:
         context: .
-    health:
-      command: "false"
+    healthcheck:
+      test: [sh, -c, "false"]
       interval_secs: 1
       timeout_secs: 30

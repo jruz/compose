@@ -137,7 +137,7 @@ fn docker_health_check() {
 }
 
 #[test]
-fn docker_health_check_exec() {
+fn docker_health_check_without_sh() {
     let output = run_docker_fixture("docker_health_check_exec", "run");
     assert_exit_code(&output, 0);
     assert_stdout_contains(&output, "waiting for health check");

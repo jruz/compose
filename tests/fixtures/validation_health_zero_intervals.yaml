@@ -1,8 +1,8 @@
 services:
   svc:
     command: "echo hello && sleep 2"
-    health:
-      command: "true"
+    healthcheck:
+      test: [sh, -c, "true"]
       interval_secs: 0
       timeout_secs: 0
 

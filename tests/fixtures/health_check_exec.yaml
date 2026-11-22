@@ -1,8 +1,8 @@
 services:
   service:
     command: "echo service-ready && exec sleep 10"
-    health:
-      exec: ["true"]
+    healthcheck:
+      test: ["true"]
       interval_secs: 1
       timeout_secs: 5
 

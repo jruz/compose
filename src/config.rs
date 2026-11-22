@@ -34,11 +34,8 @@ pub enum Error {
         source: std::io::Error,
     },
 
-    #[error("{name}: health check must specify either command or exec, not both")]
-    HealthBoth { name: String },
-
-    #[error("{name}: health check must specify command or exec")]
-    HealthEmpty { name: String },
+    #[error("{name}: healthcheck.test must start with a non-empty executable name")]
+    HealthTest { name: String },
 
     #[error("last process {name} is oneshot — run mode requires a service as the final process")]
     LastProcessOneshot { name: String },
@@ -88,9 +85,8 @@ pub struct DockerConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HealthCheck {
-    pub command: Option<String>,
-    pub exec: Option<Vec<String>>,
     pub interval_secs: u64,
+    pub test: Vec<String>,
     pub timeout_secs: u64,
 }
 
@@ -104,7 +100,7 @@ pub struct ProcessDef {
     pub env_file: Option<String>,
     #[serde(default)]
     pub environment: BTreeMap<String, String>,
-    pub health: Option<HealthCheck>,
+    pub healthcheck: Option<HealthCheck>,
     #[serde(rename = "type", default = "default_process_type")]
     pub process_type: ProcessType,
 }
@@ -242,27 +238,22 @@ fn check_driver(name: &str, proc_def: &ProcessDef) -> Result<(), Error> {
 }
 
 fn check_health(name: &str, proc_def: &ProcessDef) -> Result<(), Error> {
-    match &proc_def.health {
+    match &proc_def.healthcheck {
         None => Ok(()),
         Some(_) if proc_def.process_type == ProcessType::Oneshot => Err(Error::OneshotHealth {
             name: name.to_string(),
         }),
-        Some(health) => check_health_fields(name, health),
-    }
-}
-
-fn check_health_fields(name: &str, health: &HealthCheck) -> Result<(), Error> {
-    let has_command = health.command.as_ref().is_some_and(|cmd| !cmd.is_empty());
-    let has_exec = health.exec.as_ref().is_some_and(|exec| !exec.is_empty());
-
-    match (has_command, has_exec) {
-        (false, false) => Err(Error::HealthEmpty {
+        Some(health)
+            if health
+                .test
+                .first()
+                .is_some_and(|program| !program.is_empty()) =>
+        {
+            Ok(())
+        }
+        Some(_) => Err(Error::HealthTest {
             name: name.to_string(),
         }),
-        (true, true) => Err(Error::HealthBoth {
-            name: name.to_string(),
-        }),
-        _ => Ok(()),
     }
 }
 

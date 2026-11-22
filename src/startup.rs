@@ -195,9 +195,8 @@ fn build_health_info(
     network: Option<&str>,
     binary: &str,
 ) -> Option<(health::HealthConfig, health::HealthDriver)> {
-    let hc = proc_def.health.as_ref()?;
-    let expanded = expand_health(hc, env);
-    let config = health::parse_config(&expanded);
+    let hc = proc_def.healthcheck.as_ref()?;
+    let config = health::resolve_config(hc, env);
     let driver = if let Some(net) = network.filter(|_| proc_def.docker.is_some()) {
         health::HealthDriver::Docker {
             binary: binary.to_string(),
@@ -329,7 +328,7 @@ async fn start_service(
                 });
             }
             () = tokio::time::sleep(health_cfg.interval) => {
-                match health::check(&health_driver, &health_cfg.command).await {
+                match health::check(&health_driver, &health_cfg.test).await {
                     Ok(output) if output.status.success() => {
                         send_lifecycle(
                             display_tx,
@@ -362,21 +361,6 @@ async fn start_service(
                 }
             }
         }
-    }
-}
-
-fn expand_health(
-    hc: &config::HealthCheck,
-    env: &std::collections::BTreeMap<String, String>,
-) -> config::HealthCheck {
-    config::HealthCheck {
-        command: hc.command.as_ref().map(|cmd| env::expand_vars(cmd, env)),
-        exec: hc
-            .exec
-            .as_ref()
-            .map(|args| args.iter().map(|arg| env::expand_vars(arg, env)).collect()),
-        interval_secs: hc.interval_secs,
-        timeout_secs: hc.timeout_secs,
     }
 }
 

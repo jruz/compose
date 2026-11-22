@@ -3,8 +3,8 @@ services:
     command: "exec sleep 10"
     environment:
       CHECK_DIR: /tmp
-    health:
-      exec: ["test", "-d", "${CHECK_DIR}"]
+    healthcheck:
+      test: ["test", "-d", "${CHECK_DIR}"]
       interval_secs: 1
       timeout_secs: 3
 

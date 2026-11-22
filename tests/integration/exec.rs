@@ -236,7 +236,7 @@ fn shutdown_completion_on_oneshot_failure() {
 fn shutdown_completion_on_health_failure() {
     assert_shutdown_completion(
         "up",
-        "  unhealthy:\n    depends_on: [wrapper]\n    command: exec sleep 30\n    health:\n      command: 'false'\n      interval_secs: 1\n      timeout_secs: 1\n",
+        "  unhealthy:\n    depends_on: [wrapper]\n    command: exec sleep 30\n    healthcheck:\n      test: [sh, -c, 'false']\n      interval_secs: 1\n      timeout_secs: 1\n",
         1,
     );
 }
@@ -258,7 +258,7 @@ fn signal_shutdown_during_startup_waits_for_descendant() {
             "exec_descendant_shutdown.yaml",
             "up",
             &action,
-            "    health:\n      command: 'false'\n      interval_secs: 1\n      timeout_secs: 30\n",
+            "    healthcheck:\n      test: [sh, -c, 'false']\n      interval_secs: 1\n      timeout_secs: 30\n",
         );
         assert_shutdown_marker(&output, 130);
     }
@@ -286,7 +286,7 @@ fn shutdown_completion_after_wrapper_exits_naturally() {
 
 fn assert_shutdown_completion(subcommand: &str, trigger: &str, expected_code: i32) {
     let extra = format!(
-        "    health:\n      command: 'test -s \"$COMPOSE_TEST_DIR/ready\"'\n      interval_secs: 1\n      timeout_secs: 10\n{trigger}"
+        "    healthcheck:\n      test: [sh, -c, 'test -s \"$COMPOSE_TEST_DIR/ready\"']\n      interval_secs: 1\n      timeout_secs: 10\n{trigger}"
     );
     let output = shutdown_fixture("exec_descendant_shutdown.yaml", subcommand, ":", &extra);
     assert_shutdown_marker(&output, expected_code);

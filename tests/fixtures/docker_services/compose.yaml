@@ -4,8 +4,8 @@ services:
       image: compose-test-svc-server:1
       build:
         context: ./server
-    health:
-      command: "true"
+    healthcheck:
+      test: [sh, -c, "true"]
       interval_secs: 1
       timeout_secs: 10
 

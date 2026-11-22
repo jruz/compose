@@ -4,8 +4,8 @@ services:
       image: compose-test-hc-service:1
       build:
         context: ./service
-    health:
-      exec: ["cat", "/tmp/healthy"]
+    healthcheck:
+      test: [/bin/busybox, test, '!', -e, /bin/sh]
       interval_secs: 1
       timeout_secs: 10
 

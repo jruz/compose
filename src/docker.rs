@@ -162,22 +162,6 @@ pub async fn exec_check(
     cmd.output().await.map_err(|source| Error::Exec { source })
 }
 
-pub async fn exec_shell(
-    binary: &str,
-    container: &str,
-    shell_cmd: &str,
-) -> Result<std::process::Output, Error> {
-    process::Command::new(binary)
-        .arg("exec")
-        .arg(container)
-        .arg("sh")
-        .arg("-c")
-        .arg(shell_cmd)
-        .output()
-        .await
-        .map_err(|source| Error::Exec { source })
-}
-
 pub async fn is_running(binary: &str, name: &str) -> Result<bool, Error> {
     let output = match process::Command::new(binary)
         .args([

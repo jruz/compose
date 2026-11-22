@@ -25,14 +25,29 @@ fn no_processes() {
 fn health_empty() {
     let output = run_fixture("validation_health_empty.yaml", "run");
     assert_ne!(output.status.code(), Some(0_i32));
-    assert_stdout_contains(&output, "must specify command or exec");
+    assert_stdout_contains(&output, "missing field `test`");
 }
 
 #[test]
-fn health_both() {
-    let output = run_fixture("validation_health_both.yaml", "run");
-    assert_ne!(output.status.code(), Some(0_i32));
-    assert_stdout_contains(&output, "must specify either command or exec, not both");
+fn legacy_health_key_rejected() {
+    let output = run_fixture("validation_legacy_health.yaml", "run");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(&output, "unknown field `health`");
+    assert_stdout_contains(&output, "`healthcheck`");
+}
+
+#[test]
+fn legacy_healthcheck_probe_keys_rejected() {
+    for (fixture, field) in [
+        ("validation_legacy_health_command.yaml", "command"),
+        ("validation_legacy_health_exec.yaml", "exec"),
+    ] {
+        let output = run_fixture(fixture, "run");
+        let message = format!("unknown field `{field}`");
+        assert_exit_code(&output, 1);
+        assert_stdout_contains(&output, &message);
+        assert_stdout_contains(&output, "`test`");
+    }
 }
 
 #[test]
@@ -99,17 +114,23 @@ fn missing_file() {
 }
 
 #[test]
-fn health_empty_command_string() {
+fn health_empty_executable() {
     let output = run_fixture("validation_health_empty_command.yaml", "run");
-    assert_ne!(output.status.code(), Some(0_i32));
-    assert_stdout_contains(&output, "must specify command or exec");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(
+        &output,
+        "healthcheck.test must start with a non-empty executable name",
+    );
 }
 
 #[test]
-fn health_empty_exec_array() {
+fn health_empty_test_list() {
     let output = run_fixture("validation_health_empty_exec.yaml", "run");
-    assert_ne!(output.status.code(), Some(0_i32));
-    assert_stdout_contains(&output, "must specify command or exec");
+    assert_exit_code(&output, 1);
+    assert_stdout_contains(
+        &output,
+        "healthcheck.test must start with a non-empty executable name",
+    );
 }
 
 #[test]

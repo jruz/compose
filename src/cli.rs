@@ -36,9 +36,8 @@ Config schema:
       env_file: <string>              # optional path to KEY=VALUE file
       environment:                    # optional env vars (overrides env_file)
         KEY: \"VALUE\"
-      health:                         # optional health check (one of command or exec)
-        command: <string>             # health check shell command
-        exec: [<string>, ...]         # health check exec form (no shell)
+      healthcheck:                    # optional startup probe (exit 0 = ready)
+        test: [<executable>, ...]    # runs directly; use [sh, -c, <script>] for shell syntax
         interval_secs: <int>          # seconds between retries
         timeout_secs: <int>           # seconds before giving up
 

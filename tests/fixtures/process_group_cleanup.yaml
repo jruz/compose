@@ -1,8 +1,8 @@
 services:
   bg:
     command: "sleep 30 & echo bg-started; wait"
-    health:
-      command: "true"
+    healthcheck:
+      test: [sh, -c, "true"]
       interval_secs: 1
       timeout_secs: 3
 

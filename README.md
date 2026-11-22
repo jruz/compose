@@ -39,7 +39,7 @@ cargo install --path .
 
 ### `run` — run a task with its depending services
 
-- Starts all processes. When the last declared process exits, all others are killed.
+- Starts all processes and stops the others when the last declared process exits.
 - Last process exit code is returned.
 - If a support process crashes first, all are killed and exit code 1 is returned.
 - Oneshot processes run to completion during startup before dependents start.
@@ -54,8 +54,8 @@ Example config — run a migration with a database:
 services:
   db:
     command: "postgres -D /tmp/pgdata"
-    health:
-      command: "pg_isready"
+    healthcheck:
+      test: [sh, -c, "pg_isready"]
       interval_secs: 1
       timeout_secs: 10
 
@@ -79,8 +79,8 @@ Example config — run a web app with a background worker:
 services:
   redis:
     command: "redis-server"
-    health:
-      command: "redis-cli ping"
+    healthcheck:
+      test: [sh, -c, "redis-cli ping"]
       interval_secs: 1
       timeout_secs: 5
 
@@ -97,7 +97,7 @@ services:
 
 ### Commands
 
-A host `command` string requires Bash on `PATH` and runs with `bash -c`. Host health probe strings still use `sh -c`. A container `command` string is split on whitespace and passed as a CMD override without a shell.
+A host `command` string requires Bash on `PATH` and runs with `bash -c`. A container `command` string is split on whitespace and passed as a CMD override without a shell.
 
 Use a list to pass exact arguments on either runtime:
 
@@ -118,9 +118,9 @@ Instead of running shell commands, processes can run as containers via docker or
 - Set `runtime: podman` at the top level to use podman (default: `docker`)
 - Each run creates an isolated container network
 - Services are reachable by their process name (e.g. process `db` is reachable as `db`)
-- Health checks run inside the container via `exec` (`command` uses `sh -c`, `exec` runs directly)
+- Health checks run inside the container.
 - All containers and the network are cleaned up on exit
-- Set `docker.run.init: true` to add `--init` for Docker or Podman, forwarding signals and reaping child processes (useful for file watchers); omitted or `false` leaves runtime behavior unchanged
+- Set `docker.run.init: true` to add `--init` for file watchers that need signal forwarding and child reaping.
 
 ```
 compose up --config compose.yaml
@@ -139,8 +139,8 @@ services:
     environment:
       POSTGRES_PASSWORD: "${PG_PASSWORD}"
       POSTGRES_DB: "${PG_DB}"
-    health:
-      command: "pg_isready -U postgres"
+    healthcheck:
+      test: [sh, -c, "pg_isready -U postgres"]
       interval_secs: 1
       timeout_secs: 10
 
@@ -150,8 +150,8 @@ services:
       run:
         publish:
           - "${REDIS_PORT}:6379"
-    health:
-      command: "redis-cli ping"
+    healthcheck:
+      test: [sh, -c, "redis-cli ping"]
       interval_secs: 1
       timeout_secs: 5
 
@@ -202,7 +202,9 @@ services:
 
 When `docker.build.args` is omitted, resolved env vars (`environment`, `env_file`, global `--env-file`) are forwarded as build args. Set `args: {}` to forward none. Use explicit build args for non-secret inputs.
 
-Use Docker or Podman long flag names without `--`. Scalars become `--flag=value`; lists repeat the flag. `docker.build.args` uses `--build-arg`. Maps for `args` and `label` produce `--flag=KEY=value`. Quote version numbers to preserve their text.
+Use Docker or Podman long flag names without `--`. Scalars become `--flag=value`, and lists repeat the flag.
+
+`docker.build.args` uses `--build-arg`. Maps for `args` and `label` produce `--flag=KEY=value`. Quote version numbers to preserve their text.
 
 Compose reserves build `tag`, `progress`, and `help`, and run `attach`, `detach`, `help`, `log-driver`, `name`, `net`, `network`, `network-alias`, `restart`, `rm`, and `stop-timeout`. Use `docker.stop_timeout_secs` for shutdown timing.
 
@@ -248,13 +250,13 @@ services:
     environment:
       APP_PORT: "3000"
       DATABASE_URL: "postgres://user:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
-    health:
-      exec: ["curl", "--fail", "http://localhost:${APP_PORT}/health"]
+    healthcheck:
+      test: ["curl", "--fail", "http://localhost:${APP_PORT}/health"]
       interval_secs: 1
       timeout_secs: 10
 ```
 
-Applies to: `command` strings and list items, `docker.image`, `docker.build.context`, `docker.build.dockerfile`, build and run flag values, `health.command`, `health.exec`, and `environment` values.
+Applies to: `command` strings and list items, `docker.image`, `docker.build.context`, `docker.build.dockerfile`, build and run flag values, arguments in `healthcheck.test`, and `environment` values.
 Undefined variables stay literal: `${UNKNOWN}` remains `${UNKNOWN}`.
 
 Precedence: service `environment` > service `env_file` > CLI `--env-file` > launching environment.
@@ -282,17 +284,18 @@ services:
     environment:
       KEY: "VALUE"
     env_file: <path> # KEY=VALUE format, applied to this process
-    health: # health check (one of command or exec)
-      command: <string> # shell command (exit 0 = healthy), supports ${VAR}
-      exec: [<string>, ...] # direct execution without shell, supports ${VAR}
+    healthcheck: # startup probe (exit 0 = ready)
+      test: [<executable>, ...] # runs directly; use [sh, -c, <script>] for shell syntax
       interval_secs: <int> # seconds between retries
       timeout_secs: <int> # seconds before giving up
 ```
 
 ### Process types
 
-- **service** (default) — expected to stay running. Exiting is treated as a crash.
-- **oneshot** — runs to completion during startup. Exit 0 = success, dependents start. Exit non-0 = failure. Cannot have health checks — successful exit is the readiness signal.
+- **service** (default) — expected to stay running until shutdown.
+- **oneshot** — must exit successfully before dependents start.
+
+One-shot tasks cannot have health checks.
 
 Example config — database with migrations and seeding before server:
 
@@ -300,8 +303,8 @@ Example config — database with migrations and seeding before server:
 services:
   db:
     command: "postgres -D /tmp/pgdata"
-    health:
-      command: "pg_isready"
+    healthcheck:
+      test: [sh, -c, "pg_isready"]
       interval_secs: 1
       timeout_secs: 10
 

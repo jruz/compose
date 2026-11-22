@@ -2,8 +2,8 @@ services:
   redis:
     docker:
       image: redis:7-alpine
-    health:
-      command: "redis-cli ping"
+    healthcheck:
+      test: [sh, -c, "redis-cli ping"]
       interval_secs: 1
       timeout_secs: 30
 

@@ -3,8 +3,8 @@ services:
     command: 'touch "${MARKER}" && exec sleep 10'
     environment:
       MARKER: "${COMPOSE_TEST_MARKER}"
-    health:
-      command: 'test -f "${MARKER}"'
+    healthcheck:
+      test: [sh, -c, 'test -f "${MARKER}"']
       interval_secs: 1
       timeout_secs: 3
 

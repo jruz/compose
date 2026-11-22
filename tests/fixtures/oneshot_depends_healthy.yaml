@@ -1,8 +1,8 @@
 services:
   db:
     command: "echo db-ready && exec sleep 10"
-    health:
-      command: "true"
+    healthcheck:
+      test: [sh, -c, "true"]
       interval_secs: 1
       timeout_secs: 5
 

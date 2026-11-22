@@ -1,8 +1,8 @@
 services:
   redis:
     command: bun run examples/services/redis.ts
-    health:
-      command: "curl -sf http://localhost:6555/health"
+    healthcheck:
+      test: [sh, -c, "curl -sf http://localhost:6555/health"]
       interval_secs: 1
       timeout_secs: 5
 
