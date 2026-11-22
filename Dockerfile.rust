@@ -10,7 +10,7 @@ SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
     'curl=8.14.1-2+deb13u7' \
-    'docker-cli=26.1.5+dfsg1-9+deb13u1' \
+    'docker-cli=26.1.5+dfsg1-9+deb13u1+b1' \
     'docker-buildx=0.13.1+ds1-3' \
     'ripgrep=14.1.1-1+b4' \
     'git=1:2.47.3-0+deb13u1' \
