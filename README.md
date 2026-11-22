@@ -200,8 +200,6 @@ services:
           ENV: "development"
 ```
 
-When `docker.build.args` is omitted, resolved env vars (`environment`, `env_file`, global `--env-file`) are forwarded as build args. Set `args: {}` to forward none. Use explicit build args for non-secret inputs.
-
 Use Docker or Podman long flag names without `--`. Scalars become `--flag=value`, and lists repeat the flag.
 
 `docker.build.args` uses `--build-arg`. Maps for `args` and `label` produce `--flag=KEY=value`. Quote version numbers to preserve their text.

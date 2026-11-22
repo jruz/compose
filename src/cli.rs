@@ -27,7 +27,7 @@ Config schema:
         build:                        # required if no image
           context: <string>           # positional build context
           dockerfile: <string>        # optional Dockerfile path passed to --file
-          args: {KEY: \"VALUE\"}        # omit to forward resolved env; {} to disable
+          args: {KEY: \"VALUE\"}        # optional; only declared args are passed
         run:                          # extra docker run or podman run flags
           publish: [<host:container>] # example: repeated --publish
           init: <bool>                # example: --init=true or --init=false

@@ -1,29 +1,41 @@
 services:
-  implicit:
+  omitted:
     type: oneshot
     docker:
       build:
         context: ./app
+    env_file: service.env
     environment:
-      GREETING: implicit-from-env
+      GREETING: not-forwarded
   empty:
     type: oneshot
-    depends_on: [implicit]
+    depends_on: [omitted]
     docker:
       build:
         context: ./app
         args: {}
+    env_file: service.env
     environment:
       GREETING: not-forwarded
-  build-args-main:
+  listed:
+    type: oneshot
     depends_on: [empty]
+    docker:
+      build:
+        context: ./app
+        args: [GREETING, 'EXTRA=literal value']
+    env_file: service.env
+    environment:
+      GREETING: ignored-for-bare-name
+  build-args-main:
+    depends_on: [listed]
     docker:
       image: "${IMAGE_NAME}:1"
       build:
         context: "${BUILD_CONTEXT}"
         dockerfile: "${BUILD_FILE}"
         args:
-          GREETING: "${MESSAGE}"
+          GREETING: "${GREETING} / ${SERVICE_VALUE} / ${CLI_VALUE} / ${HOST_VALUE}"
       run:
         workdir: "${WORKDIR}"
         read-only: true
@@ -31,10 +43,10 @@ services:
           - "${WORKDIR}"
           - /second
     command: ["sh", "-ec", "touch write-check /second/write-check; pwd; cat /greeting.txt"]
+    env_file: service.env
     environment:
       BUILD_CONTEXT: ./app
       BUILD_FILE: app/Dockerfile
-      GREETING: overridden
+      GREETING: from-inline
       IMAGE_NAME: compose-test-build-args
-      MESSAGE: hello from build arg
       WORKDIR: /first

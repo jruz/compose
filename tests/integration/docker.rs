@@ -55,12 +55,32 @@ fn docker_build_and_run_from_mixed_case_project_directory() {
 
 #[test]
 fn docker_build_args() {
-    let output = run_docker_fixture("docker_build_args", "run");
+    let bin = binary_path();
+    let dir = fixture_path("docker_build_args");
+    let output = std::process::Command::new(bin)
+        .args(["run", "--config", "compose.yaml", "--env-file", "cli.env"])
+        .current_dir(dir)
+        .envs([
+            ("GREETING", "from-host"),
+            ("SERVICE_VALUE", "from-host"),
+            ("CLI_VALUE", "from-host"),
+            ("HOST_VALUE", "from-host"),
+        ])
+        .output()
+        .expect("run Compose with conflicting build argument sources");
     assert_exit_code(&output, 0);
-    assert_stdout_contains(&output, "[implicit] baked: implicit-from-env");
+    assert_stdout_contains(&output, "[omitted] baked: unset");
+    assert_stdout_contains(&output, "[omitted] extra: unset");
     assert_stdout_contains(&output, "[empty] baked: unset");
+    assert_stdout_contains(&output, "[empty] extra: unset");
+    assert_stdout_contains(&output, "[listed] baked: from-host");
+    assert_stdout_contains(&output, "[listed] extra: literal value");
     assert_stdout_contains(&output, "[build-args-main] /first");
-    assert_stdout_contains(&output, "[build-args-main] baked: hello from build arg");
+    assert_stdout_contains(
+        &output,
+        "[build-args-main] baked: from-inline / from-service / from-cli / from-host",
+    );
+    assert_stdout_contains(&output, "[build-args-main] extra: unset");
 }
 
 #[test]

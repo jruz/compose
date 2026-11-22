@@ -125,12 +125,6 @@ pub fn build_args(build: &Build, env: &BTreeMap<String, String>) -> Vec<String> 
         let path = env::expand_vars(dockerfile, env);
         args.push(format!("--file={path}"));
     }
-    if !build.flags.contains_key("args") {
-        let forwarded = env
-            .iter()
-            .map(|(key, value)| format!("--build-arg={key}={value}"));
-        args.extend(forwarded);
-    }
     args
 }
 
