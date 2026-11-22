@@ -17,6 +17,7 @@ Processes start in dependency order. Health checks gate dependent startup.
 Config schema:
 
   env_file: <string>                  # optional shared KEY=VALUE defaults
+  sops_file: <string>                 # optional shared encrypted runtime env
   runtime: <docker|podman>            # container runtime (default: docker)
   services:
     <name>:                           # unique host, container, or oneshot service name
@@ -35,7 +36,8 @@ Config schema:
         stop_timeout_secs: <int>      # seconds before force kill (default: 10)
       depends_on: [<string>, ...]     # processes that must be healthy first
       env_file: <string>              # optional path to KEY=VALUE file
-      environment:                    # optional env vars (overrides env_file)
+      sops_file: <string>             # optional encrypted runtime env for this service
+      environment:                    # optional env vars (highest precedence)
         KEY: \"VALUE\"
       healthcheck:                    # optional startup probe (exit 0 = ready)
         test: [<executable>, ...]    # runs directly; use [sh, -c, <script>] for shell syntax
@@ -44,10 +46,11 @@ Config schema:
 
 Variable interpolation:
 
-  ${VAR} resolves from service environment, service env_file, CLI --env-file,
-  top-level env_file, then host environment.
-  Applies to command strings and each list item, health commands, environment values,
-  image, build context, and Docker build/run flag values. Keys are not interpolated.
+  Runtime precedence (highest first): service environment, service sops_file,
+  service env_file, CLI --env-file, top-level sops_file, top-level env_file,
+  then host environment.
+  sops_file requires sops on PATH and is decrypted in memory. Builds and docker.image
+  interpolation skip both sops_file layers. Keys are not interpolated.
 
 Docker flags:
 

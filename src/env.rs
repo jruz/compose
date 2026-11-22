@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 use crate::config;
 
@@ -10,25 +11,88 @@ pub enum Error {
 
     #[error(transparent)]
     Config(#[from] config::Error),
+
+    #[error("could not run sops for {path}: {source}")]
+    SopsCommand {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("sops could not decrypt {path} ({status}); check the file and decryption credentials")]
+    SopsDecrypt {
+        path: PathBuf,
+        status: std::process::ExitStatus,
+    },
+
+    #[error("sops output for {path} is not valid dotenv")]
+    SopsOutput { path: PathBuf },
+}
+
+pub struct Global {
+    pub build: BTreeMap<String, String>,
+    pub runtime: BTreeMap<String, String>,
+}
+
+pub struct Runtime {
+    pub image: Option<String>,
+    pub vars: BTreeMap<String, String>,
 }
 
 pub fn resolve(
     global_env: &BTreeMap<String, String>,
     proc_def: &config::ProcessDef,
 ) -> Result<BTreeMap<String, String>, Error> {
-    let mut env = global_env.clone();
-    load_process_env_file(&mut env, proc_def)?;
-    apply_inline_env(&mut env, proc_def);
-    interpolate(&mut env)?;
-    Ok(env)
+    let path = proc_def.env_file.as_deref().map(Path::new);
+    let dotenv = load_dotenv(path)?;
+    let vars = merge(global_env, dotenv);
+    resolve_inline(vars, proc_def)
 }
 
-fn apply_inline_env(env: &mut BTreeMap<String, String>, proc_def: &config::ProcessDef) {
-    for (key, value) in &proc_def.environment {
-        let key = key.clone();
-        let value = value.clone();
-        env.insert(key, value);
-    }
+pub async fn resolve_runtime(
+    global: &Global,
+    proc_def: &config::ProcessDef,
+) -> Result<Runtime, Error> {
+    let dotenv_path = proc_def.env_file.as_deref().map(Path::new);
+    let dotenv = load_dotenv(dotenv_path)?;
+    let sops_path = proc_def.sops_file.as_deref();
+    let sops = load_sops(sops_path).await?;
+    let image = match proc_def
+        .docker
+        .as_ref()
+        .and_then(|docker| docker.image.as_ref())
+    {
+        Some(image) => {
+            let build_dotenv = dotenv.clone();
+            let build_vars = merge(&global.build, build_dotenv);
+            let plain = resolve_inline(build_vars, proc_def)?;
+            let image = expand_vars(image, &plain);
+            Some(image)
+        }
+        None => None,
+    };
+    let mut vars = merge(&global.runtime, dotenv);
+    vars.extend(sops);
+    let vars = resolve_inline(vars, proc_def)?;
+    Ok(Runtime { image, vars })
+}
+
+fn resolve_inline(
+    mut vars: BTreeMap<String, String>,
+    proc_def: &config::ProcessDef,
+) -> Result<BTreeMap<String, String>, Error> {
+    let inline = proc_def.environment.clone();
+    vars.extend(inline);
+    interpolate(&mut vars)?;
+    Ok(vars)
+}
+
+fn merge(
+    base: &BTreeMap<String, String>,
+    overrides: BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut vars = base.clone();
+    vars.extend(overrides);
+    vars
 }
 
 fn interpolate(env: &mut BTreeMap<String, String>) -> Result<(), Error> {
@@ -211,28 +275,72 @@ fn format_cycle(path: &[&str], back_edge: &str) -> String {
     }
 }
 
-pub fn load_global(
-    shared_path: Option<&Path>,
+pub async fn load_global(
+    config: &config::Config,
     cli_path: Option<&Path>,
-) -> Result<BTreeMap<String, String>, Error> {
-    let mut env = BTreeMap::new();
-    for path in [shared_path, cli_path].into_iter().flatten() {
-        let file_env = config::parse_env_file(path)?;
-        env.extend(file_env);
-    }
-    Ok(env)
+) -> Result<Global, Error> {
+    let shared_path = config.env_file.as_deref();
+    let shared = load_dotenv(shared_path)?;
+    let cli = load_dotenv(cli_path)?;
+    let build_cli = cli.clone();
+    let build = merge(&shared, build_cli);
+    let sops_path = config.sops_file.as_deref();
+    let sops = load_sops(sops_path).await?;
+    let mut runtime = merge(&shared, sops);
+    runtime.extend(cli);
+    Ok(Global { build, runtime })
 }
 
-fn load_process_env_file(
-    env: &mut BTreeMap<String, String>,
-    proc_def: &config::ProcessDef,
-) -> Result<(), Error> {
-    if let Some(path) = &proc_def.env_file {
-        let env_path = Path::new(path);
-        let file_env = config::parse_env_file(env_path)?;
-        for (key, value) in file_env {
-            env.insert(key, value);
+fn load_dotenv(path: Option<&Path>) -> Result<BTreeMap<String, String>, Error> {
+    let Some(path) = path else {
+        let vars = BTreeMap::new();
+        return Ok(vars);
+    };
+    let vars = config::parse_env_file(path)?;
+    Ok(vars)
+}
+
+async fn load_sops(path: Option<&Path>) -> Result<BTreeMap<String, String>, Error> {
+    let Some(path) = path else {
+        let vars = BTreeMap::new();
+        return Ok(vars);
+    };
+    let stdin = Stdio::null();
+    let output = tokio::process::Command::new("sops")
+        .args(["--decrypt", "--output-type", "dotenv", "--"])
+        .arg(path)
+        .stdin(stdin)
+        .kill_on_drop(true)
+        .output()
+        .await;
+    let output = match output {
+        Ok(output) => output,
+        Err(source) => {
+            return Err(Error::SopsCommand {
+                path: path.to_path_buf(),
+                source,
+            });
         }
+    };
+    if !output.status.success() {
+        return Err(Error::SopsDecrypt {
+            path: path.to_path_buf(),
+            status: output.status,
+        });
     }
-    Ok(())
+    let content = match std::str::from_utf8(&output.stdout) {
+        Ok(content) if !content.contains('\0') => content,
+        _ => {
+            return Err(Error::SopsOutput {
+                path: path.to_path_buf(),
+            });
+        }
+    };
+    let vars = config::parse_dotenv(path, content)?;
+    if vars.contains_key("") {
+        return Err(Error::SopsOutput {
+            path: path.to_path_buf(),
+        });
+    }
+    Ok(vars)
 }

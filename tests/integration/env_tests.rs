@@ -204,6 +204,63 @@ fn env_precedence_chain() {
 }
 
 #[test]
+fn sops_runtime_files() {
+    let output = run_sops_fixture("compose.yaml");
+    assert_exit_code(&output, 0);
+    assert_stdout_contains(
+        &output,
+        "host=shared-sops/cli-dotenv/service-sops/inline/shared-dotenv-only/service-dotenv-only/service-only",
+    );
+    assert_stdout_contains(&output, "sibling=shared-sops/cli-dotenv");
+    assert_stdout_contains(
+        &output,
+        "container=shared-sops/shared-dotenv-only/service-only/service-only",
+    );
+    assert_stdout_contains(&output, "baked: shared-dotenv/${PRIVATE}");
+}
+
+#[test]
+fn sops_runtime_rejects_failed_decrypt() {
+    assert_sops_failure("failed.yaml", "sops could not decrypt failed.yaml");
+}
+
+#[test]
+fn sops_runtime_rejects_malformed_output() {
+    assert_sops_failure(
+        "malformed.yaml",
+        "malformed env file malformed.yaml at line 1",
+    );
+}
+
+fn assert_sops_failure(fixture: &str, diagnostic: &str) {
+    let output = run_sops_fixture(fixture);
+    assert!(!output.status.success());
+    assert_stdout_contains(&output, diagnostic);
+    let logs = format!("{}{}", stdout_of(&output), stderr_of(&output));
+    assert!(!logs.contains("synthetic-do-not-log"));
+    assert!(!logs.contains("should-not-start"));
+}
+
+fn run_sops_fixture(config: &str) -> std::process::Output {
+    let dir = fixture_path("sops_runtime");
+    let host_path = std::env::var_os("PATH").expect("test PATH");
+    let fixture_dir = dir.clone();
+    let fixture_paths = std::iter::once(fixture_dir);
+    let host_paths = std::env::split_paths(&host_path);
+    let paths = fixture_paths.chain(host_paths);
+    let path = std::env::join_paths(paths).expect("prepend mock sops to PATH");
+    let binary = binary_path();
+    std::process::Command::new(binary)
+        .args(["run", "--config", config, "--env-file", "cli.env"])
+        .current_dir(dir)
+        .env("PATH", path)
+        .env_remove("PRIVATE")
+        .env_remove("SERVICE_DOTENV_ONLY")
+        .output()
+        .expect("run Compose with mock sops")
+}
+
+#[test]
 fn health_command_interpolation() {
     let output = run_fixture_with_temporary_marker("health_command_interpolation.yaml", "run");
     assert_exit_code(&output, 0);

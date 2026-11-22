@@ -1,0 +1,4 @@
+sops_file: failed.yaml
+services:
+  host:
+    command: [echo, should-not-start]

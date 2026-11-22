@@ -1,0 +1,4 @@
+services:
+  host:
+    sops_file: malformed.yaml
+    command: [echo, should-not-start]

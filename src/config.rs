@@ -59,6 +59,7 @@ pub struct Config {
     #[serde(default)]
     pub runtime: Runtime,
     pub services: IndexMap<String, ProcessDef>,
+    pub sops_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -100,6 +101,7 @@ pub struct ProcessDef {
     pub healthcheck: Option<HealthCheck>,
     #[serde(rename = "type", default = "default_process_type")]
     pub process_type: ProcessType,
+    pub sops_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -149,6 +151,10 @@ pub fn parse_env_file(path: &Path) -> Result<BTreeMap<String, String>, Error> {
         source,
     })?;
 
+    parse_dotenv(path, &content)
+}
+
+pub fn parse_dotenv(path: &Path, content: &str) -> Result<BTreeMap<String, String>, Error> {
     let lines = content.lines().enumerate();
     let init = BTreeMap::new();
     lines

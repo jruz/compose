@@ -113,7 +113,7 @@ pub fn resolve_start_order(config: &config::Config) -> Vec<String> {
 pub async fn start_all(
     config: &config::Config,
     start_order: &[String],
-    global_env: &BTreeMap<String, String>,
+    global_env: &env::Global,
     channels: &Channels<'_>,
     event_rx: &mut mpsc::UnboundedReceiver<message::ActorExited>,
     network: Option<&str>,
@@ -141,9 +141,8 @@ pub async fn start_all(
             },
         )?;
 
-        let env = env::resolve(global_env, proc_def)?;
-
-        let actor = spawn_process_actor(name, proc_def, &env, network, channels)?;
+        let runtime = env::resolve_runtime(global_env, proc_def).await?;
+        let actor = spawn_process_actor(name, proc_def, &runtime, network, channels)?;
         actors.push(actor);
 
         if is_oneshot {
@@ -153,7 +152,8 @@ pub async fn start_all(
             let completed_actor = take_actor(actors, name)?;
             completed_actor.join.await??;
         } else {
-            let health_info = build_health_info(proc_def, &env, name, network, channels.binary);
+            let health_info =
+                build_health_info(proc_def, &runtime.vars, name, network, channels.binary);
 
             if health_info.is_some() {
                 send_lifecycle(
@@ -380,20 +380,17 @@ fn expand_command(command: &config::Command, env: &BTreeMap<String, String>) -> 
 fn spawn_process_actor(
     name: &str,
     proc_def: &config::ProcessDef,
-    env: &std::collections::BTreeMap<String, String>,
+    runtime: &env::Runtime,
     network: Option<&str>,
     channels: &Channels<'_>,
 ) -> Result<message::ActorHandle, Error> {
+    let env = &runtime.vars;
     let expanded_command = proc_def
         .command
         .as_ref()
         .map(|command| expand_command(command, env));
     if let (Some(docker_config), Some(net)) = (&proc_def.docker, network) {
-        let image_ref = docker_config
-            .image
-            .as_ref()
-            .map(|value| env::expand_vars(value, env));
-        let image_ref = image_ref.as_deref();
+        let image_ref = runtime.image.as_deref();
         let image = docker::image_tag(net, name, image_ref);
         let flags = crate::docker_flags::args(&docker_config.run, env);
         let run_config = docker_actor::RunConfig {

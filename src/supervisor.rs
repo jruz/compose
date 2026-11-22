@@ -49,7 +49,7 @@ struct RunContext<'cfg, 'run> {
     channels: &'run startup::Channels<'cfg>,
     config: &'cfg config::Config,
     display_tx: &'run mpsc::UnboundedSender<message::DisplayMsg>,
-    global_env: &'run std::collections::BTreeMap<String, String>,
+    global_env: &'run env::Global,
     network: Option<&'run str>,
     start_order: &'run [String],
 }
@@ -78,9 +78,8 @@ pub async fn run(
     let start_order = startup::resolve_start_order(&config);
     let shutdown = resolve_shutdown(&mode, &start_order)?;
     check_main_not_oneshot(&shutdown, &config)?;
-    let shared_path = config.env_file.as_deref();
     let cli_path = global_env_file.as_deref();
-    let global_env = env::load_global(shared_path, cli_path)?;
+    let global_env = env::load_global(&config, cli_path).await?;
     let mut signals = lifecycle::register_signals()?;
     let network_name = has_docker.then(|| docker_infra::generate_network_name(&project_name));
 
@@ -138,7 +137,7 @@ async fn run_until_shutdown(
                 context.config,
                 context.start_order,
                 network,
-                context.global_env,
+                &context.global_env.build,
                 context.display_tx,
             ) => {
                 setup?;

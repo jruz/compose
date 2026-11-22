@@ -1,0 +1,21 @@
+#!/bin/sh
+if [ "$#" -ne 5 ] || [ "$1 $2 $3 $4" != '--decrypt --output-type dotenv --' ]; then
+    exit 2
+fi
+case "$5" in
+    'shared secrets.yaml')
+        printf '%s\n' 'SHARED=shared-sops' 'CLI_WINS=shared-sops' 'SERVICE_WINS=shared-sops'
+        ;;
+    service.yaml)
+        printf '%s\n' 'SERVICE_WINS=service-sops' 'INLINE_WINS=service-sops' 'PRIVATE=service-only'
+        ;;
+    failed.yaml)
+        printf '%s\n' 'TEST_VALUE=synthetic-do-not-log'
+        printf '%s\n' 'synthetic-do-not-log' >&2
+        exit 9
+        ;;
+    malformed.yaml)
+        printf '%s\n' 'synthetic-do-not-log'
+        ;;
+    *) exit 2 ;;
+esac

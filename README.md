@@ -223,6 +223,16 @@ services:
 
 Set top-level `env_file` to share `KEY=VALUE` defaults across all services. Like service `env_file`, relative paths resolve from the working directory.
 
+Use `sops_file` at the top level to share encrypted runtime values or under a service to scope them to that service. Paths resolve from the working directory. Compose requires `sops` on `PATH` and parses its decrypted dotenv output in memory.
+
+```yaml
+sops_file: .env.dev.yaml
+services:
+  app:
+    command: [node, server.js]
+    sops_file: .env.app.yaml
+```
+
 Use `--env-file` to override shared defaults for one invocation:
 
 ```sh
@@ -232,7 +242,7 @@ compose run --config compose.yaml --env-file .env
 When launching from Bash, `--env-file` also accepts process substitution without any manifest setting:
 
 ```bash
-compose run --config compose.yaml --env-file <(sops --decrypt secrets.env)
+compose run --config compose.yaml --env-file <(printf 'PORT=3000\n')
 ```
 
 Variable interpolation with `${VAR}` uses resolved env vars and host environment:
@@ -259,7 +269,9 @@ services:
 Applies to: `command` strings and list items, `docker.image`, `docker.build.context`, `docker.build.dockerfile`, build and run flag values, arguments in `healthcheck.test`, and `environment` values.
 Undefined variables stay literal: `${UNKNOWN}` remains `${UNKNOWN}`.
 
-Precedence for runtime values and `${VAR}` lookup: service `environment` > service `env_file` > CLI `--env-file` > top-level `env_file` > launching environment.
+Runtime precedence, highest first: service `environment` > service `sops_file` > service `env_file` > CLI `--env-file` > top-level `sops_file` > top-level `env_file` > launching environment.
+
+Use `env_file` and `sops_file` together to combine values. At the same scope, `sops_file` overrides duplicate keys. Build settings and `docker.image` skip both `sops_file` layers, even when a variable is referenced indirectly.
 
 ## Config schema
 
@@ -267,6 +279,7 @@ Use `services` for host processes, containers, and one-shot tasks.
 
 ```yaml
 env_file: <path> # optional shared KEY=VALUE defaults
+sops_file: <path> # optional shared encrypted runtime env
 runtime: <docker|podman> # container runtime (default: docker)
 services:
   <name>:
@@ -285,6 +298,7 @@ services:
     environment:
       KEY: "VALUE"
     env_file: <path> # KEY=VALUE format, applied to this process
+    sops_file: <path> # encrypted runtime env for this process
     healthcheck: # startup probe (exit 0 = ready)
       test: [<executable>, ...] # runs directly; use [sh, -c, <script>] for shell syntax
       interval_secs: <int> # seconds between retries

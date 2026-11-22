@@ -1,0 +1,27 @@
+env_file: shared.env
+sops_file: shared secrets.yaml
+services:
+  host:
+    type: oneshot
+    env_file: service.env
+    sops_file: service.yaml
+    environment:
+      INLINE_WINS: inline
+      RUNTIME_ALIAS: "${PRIVATE}"
+    command: [printf, 'host=%s/%s/%s/%s/%s/%s/%s\n', '${SHARED}', '${CLI_WINS}', '${SERVICE_WINS}', '${INLINE_WINS}', '${SHARED_DOTENV_ONLY}', '${SERVICE_DOTENV_ONLY}', '${RUNTIME_ALIAS}']
+  sibling:
+    type: oneshot
+    depends_on: [host]
+    command: [bash, -ec, 'test -z "$PRIVATE$SERVICE_DOTENV_ONLY"; printf "sibling=%s/%s\n" "$SHARED" "$SERVICE_WINS"']
+  container:
+    depends_on: [sibling]
+    sops_file: service.yaml
+    environment:
+      BUILD_ALIAS: "${PRIVATE}"
+    docker:
+      image: "compose-test-sops:${SHARED}"
+      build:
+        context: ../docker_build_args/app
+        args:
+          GREETING: "${SHARED}/${BUILD_ALIAS}"
+    command: [sh, -ec, 'cat /greeting.txt; printf "container=%s/%s/%s/%s\n" "$SHARED" "$SHARED_DOTENV_ONLY" "$PRIVATE" "$BUILD_ALIAS"']
