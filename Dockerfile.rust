@@ -30,7 +30,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo-nextest@0.9.152 \
     cargo-watch@8.5.3 \
     cargo-edit@0.13.14 \
-    cargo-machete@0.9.2 \
+    cargo-machete@0.10.1 \
     cargo-outdated@0.19.0 \
     cargo-udeps@0.1.61 \
     just@1.59.0 \
