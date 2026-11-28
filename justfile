@@ -1,8 +1,8 @@
-mod rust '.just/rust.justfile'
-mod just '.just/just.justfile'
-mod oxfmt '.just/oxfmt.justfile'
-mod git '.just/git.justfile'
-mod tools '.just/tools.justfile'
+mod rust '.just/rust.just'
+mod just '.just/just.just'
+mod oxfmt '.just/oxfmt.just'
+mod git '.just/git.just'
+mod tools '.just/tools.just'
 
 release_bin := "target/docker/" + arch() + "-unknown-linux-musl/release/compose"
 
