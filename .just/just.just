@@ -5,7 +5,7 @@ fmt-check:
         --hidden \
         --exclude tests/fixtures \
         --type file \
-        --glob '*justfile' \
+        '^(justfile|.+\.just)$' \
         --exec just \
         --justfile {} \
         --unstable \
@@ -17,7 +17,7 @@ fmt-fix:
         --hidden \
         --exclude tests/fixtures \
         --type file \
-        --glob '*justfile' \
+        '^(justfile|.+\.just)$' \
         --exec just \
         --justfile {} \
         --unstable \
