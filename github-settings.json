@@ -38,8 +38,8 @@
   ],
   "repository": "jruz/compose",
   "security": {
-    "vulnerability-alerts": true,
-    "automated-security-fixes": false
+    "vulnerability_alerts": true,
+    "automated_security_fixes": false
   },
   "settings": {
     "allow_auto_merge": true,

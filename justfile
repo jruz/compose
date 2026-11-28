@@ -21,6 +21,7 @@ fix:
     just rust::fix
 
 setup:
+    direnv allow
     just git::hooks-setup
 
 install:
