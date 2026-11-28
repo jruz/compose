@@ -150,19 +150,31 @@ def runtime-image [root: path, runtime: string]: nothing -> string {
     }
 }
 
+def data-home []: nothing -> path {
+    $env.XDG_DATA_HOME? | default ($env.HOME | path join .local share)
+}
+
+def cache-home []: nothing -> path {
+    $env.XDG_CACHE_HOME? | default ($env.HOME | path join .cache)
+}
+
+def cargo-home []: nothing -> path {
+    $env.CARGO_HOME? | default ($env.HOME | path join .cargo)
+}
+
 def pnpm-store []: nothing -> path {
-    $env.HOME | path join .local share pnpm
+    data-home | path join pnpm
 }
 
 def pnpm-cache []: nothing -> path {
-    $env.HOME | path join .cache pnpm
+    cache-home | path join pnpm
 }
 
 def cache-dirs [runtime: string]: nothing -> list<path> {
     match $runtime {
         bun => []
         node => [(pnpm-store) (pnpm-cache)]
-        rust => [($env.HOME | path join .cargo registry) ($env.HOME | path join .cargo git)]
+        rust => [(cargo-home | path join registry) (cargo-home | path join git)]
     }
 }
 
@@ -174,7 +186,7 @@ def runtime-env [runtime: string]: nothing -> list<string> {
             --env $"pnpm_config_cache_dir=(pnpm-cache)"
         ]
         rust => [
-            --env $"CARGO_HOME=($env.HOME)/.cargo"
+            --env $"CARGO_HOME=(cargo-home)"
             --env CARGO_TARGET_DIR=/app/target/docker
         ]
     }
